@@ -1,0 +1,285 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Accent palette — read by Tailwind config's `accent` colors via CSS vars
+   so the SettingsMenu THEME ACCENT picker can swap the dashboard's tint
+   between Emerald (default), Violet, and Rose at runtime. Values are space-
+   separated R G B triplets so Tailwind's `rgb(var(--x) / <alpha-value>)`
+   pattern works for opacity-modified utility classes (bg-accent/15 etc). */
+:root {
+  --accent-rgb:      52 211 153;
+  --accent-glow-rgb: 110 231 183;
+  --accent-dim-rgb:  16 185 129;
+}
+
+/* `overflow-x: hidden` on html/body breaks `position: sticky` in
+   descendants, so we contain horizontal overflow at the app root instead.
+   The root div in App.tsx pairs with this. */
+body { max-width: 100vw; }
+html { font-feature-settings: "cv02", "cv03", "cv04", "cv11"; }
+body { font-family: "Inter", ui-sans-serif, system-ui, sans-serif; }
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-ink-700 bg-gradient-to-br from-ink-900 to-ink-800
+           shadow-[0_0_0_1px_rgba(255,255,255,0.02),0_8px_32px_rgba(0,0,0,0.4)]
+           transition hover:border-accent/40 hover:shadow-[0_0_0_1px_rgba(52,211,153,0.3),0_12px_40px_rgba(52,211,153,0.15)];
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold
+           text-white shadow-[0_0_20px_rgba(52,211,153,0.3)] transition
+           hover:bg-accent-glow hover:shadow-[0_0_24px_rgba(110,231,183,0.45)] active:scale-[0.98];
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-800/50 px-3 py-1.5
+           text-xs font-medium text-zinc-300 transition
+           hover:border-ink-600 hover:bg-ink-700 hover:text-zinc-100 active:scale-[0.98];
+  }
+}
+
+.dot-grid {
+  background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+/* CRT scanline overlay — applied to a top-level wrapper, sits above content
+   but pointer-events: none so it doesn't block clicks. Subtle enough to read
+   as retro flair, not "broken display". */
+.scanlines::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  /* Scanline tint follows the accent picker — green/violet/rose CRT vibe. */
+  background: repeating-linear-gradient(
+    to bottom,
+    rgb(var(--accent-rgb) / 0.06) 0px,
+    rgb(var(--accent-rgb) / 0.06) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  /* Respect SettingsMenu's SCANLINES intensity slider (0..1). When unset,
+     defaults to 1 (fully visible). */
+  opacity: var(--scanline-opacity, 1);
+  mix-blend-mode: screen;
+}
+
+/* Subtle CRT vignette */
+.crt-vignette::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 49;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 50%,
+    rgba(0, 0, 0, 0.35) 100%
+  );
+}
+
+/* Phosphor glow — apply to accent text for that CRT shimmer. Uses
+   --accent-rgb so the glow tracks the SettingsMenu THEME ACCENT picker
+   (Emerald / Violet / Rose). Modern `rgb(... / alpha)` syntax — space-
+   separated triplet works directly with Tailwind's CSS variable form. */
+.phosphor {
+  text-shadow:
+    0 0 6px rgb(var(--accent-rgb) / 0.6),
+    0 0 18px rgb(var(--accent-rgb) / 0.25);
+}
+
+/* Soft phosphor — for body text that should feel a touch glowy without shouting */
+.phosphor-soft {
+  text-shadow: 0 0 8px rgb(var(--accent-rgb) / 0.18);
+}
+
+/* Terminal-style monospace utility for structural labels */
+.term-label {
+  @apply font-mono uppercase tracking-wider;
+}
+
+/* Bracket frame around a value, e.g. [ 2/4 ] — used in status pills */
+.bracket-value::before { content: "["; padding-right: 0.25rem; opacity: 0.5; }
+.bracket-value::after  { content: "]"; padding-left: 0.25rem; opacity: 0.5; }
+
+/* tab-switch wipe transition — CRT channel-flip feel between main tabs.
+   The wrapper is keyed on the active tab so React remounts on switch and the
+   animation replays. clip-path reveals the new content from left while a
+   thin emerald scanline sweeps across, fading from #6ee7b7 to transparent. */
+@keyframes tab-wipe {
+  0% {
+    clip-path: inset(0 100% 0 0);
+    background: linear-gradient(to left,
+      rgba(110, 231, 183, 0.85) 0%,
+      rgba(110, 231, 183, 0.0) 12%,
+      transparent 100%);
+    background-position: right center;
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+  }
+  60% {
+    clip-path: inset(0 0 0 0);
+    background-position: left center;
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+    background: transparent;
+  }
+}
+.animate-tab-wipe {
+  animation: tab-wipe 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: clip-path, background-position;
+}
+
+/* Toast slide-in — used by Toast.tsx (top-right corner). */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(0.75rem); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.animate-toast-in {
+  animation: toast-in 350ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Status-pill pulsing dot — used in AgentBadge for thinking/responding states. */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1;   transform: scale(1);   }
+  50%      { opacity: 0.4; transform: scale(1.4); }
+}
+
+/* Copy-flash + ✓ glyph reveal — used by CopyableText. */
+@keyframes copy-flash {
+  0%   { background-color: transparent; }
+  35%  { background-color: rgba(52, 211, 153, 0.14); }
+  100% { background-color: transparent; }
+}
+@keyframes check-pop {
+  0%   { opacity: 0; transform: translateX(-6px); }
+  15%  { opacity: 1; transform: translateX(0); }
+  85%  { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(6px); }
+}
+.animate-copy-flash { animation: copy-flash 600ms ease-out forwards; }
+.animate-check-pop  { animation: check-pop 800ms ease-out forwards; }
+
+/* Hover affordances — phosphor-style emerald edge glow + group-hover text
+   brightening. Used across cards, badges, host tiles, machine tiles, and
+   workflow orbs so the dashboard reads as alive when the user mouses over
+   interactive zones. Transitions match the rest of the dashboard's 200ms feel. */
+.hover-phosphor-card {
+  @apply transition-all duration-200 hover:border-emerald-500/60
+         hover:shadow-[0_0_12px_rgba(16,185,129,0.25)];
+}
+.group-hover-phosphor-text {
+  @apply transition-all duration-200 group-hover:text-emerald-300
+         group-hover:drop-shadow-[0_0_4px_rgba(16,185,129,0.6)];
+}
+.group-hover-phosphor-thumb {
+  @apply transition-all duration-200 group-hover:saturate-150
+         group-hover:brightness-105;
+}
+
+/* Animations toggle (settings → DISPLAY → ANIMATIONS [OFF]) — disables all
+   keyframe animations + transitions site-wide. Toggled by SettingsMenu via
+   document.documentElement.classList. Same approach as prefers-reduced-motion
+   but explicit user control. */
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0ms !important;
+}
+
+/* Breathing pulse for agent cards — slow + dim when idle, faster + brighter
+   when actively thinking/responding. Tracks --accent-rgb so it follows the
+   THEME ACCENT picker. .reduce-motion (above) disables it via wildcard. */
+@keyframes breathe-idle {
+  0%, 100% { box-shadow: 0 0 8px rgb(var(--accent-rgb) / 0.10); }
+  50%      { box-shadow: 0 0 16px rgb(var(--accent-rgb) / 0.20); }
+}
+@keyframes breathe-active {
+  0%, 100% { box-shadow: 0 0 10px rgb(var(--accent-rgb) / 0.25); }
+  50%      { box-shadow: 0 0 24px rgb(var(--accent-rgb) / 0.55); }
+}
+.card[data-state="idle"] {
+  animation: breathe-idle 3.6s ease-in-out infinite;
+}
+.card[data-state="thinking"],
+.card[data-state="responding"] {
+  animation: breathe-active 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card[data-state] { animation: none !important; }
+}
+
+/* Replay scrubber — accent-themed range input. Track is a thin ink rail with
+   the played portion filled by the accent color (linear-gradient driven by
+   the input's value via background-size trick), and the thumb is an accent
+   circle with a phosphor glow. Tracks --accent-rgb so it follows the THEME
+   ACCENT picker. */
+.replay-scrubber {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+}
+.replay-scrubber::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: linear-gradient(to right,
+    rgb(var(--accent-rgb) / 0.7) 0%,
+    rgb(var(--accent-rgb) / 0.7) calc(var(--rs-pct, 0%)),
+    rgb(39 42 61 / 1) calc(var(--rs-pct, 0%)),
+    rgb(39 42 61 / 1) 100%);
+}
+.replay-scrubber::-moz-range-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: rgb(39 42 61 / 1);
+}
+.replay-scrubber::-moz-range-progress {
+  height: 4px;
+  border-radius: 9999px;
+  background: rgb(var(--accent-rgb) / 0.7);
+}
+.replay-scrubber::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: rgb(var(--accent-rgb));
+  border: 2px solid rgb(10 10 13);
+  box-shadow: 0 0 8px rgb(var(--accent-rgb) / 0.6);
+  margin-top: -5px;
+  cursor: pointer;
+  transition: box-shadow 120ms ease-out, transform 120ms ease-out;
+}
+.replay-scrubber::-webkit-slider-thumb:hover,
+.replay-scrubber:focus::-webkit-slider-thumb {
+  box-shadow: 0 0 14px rgb(var(--accent-rgb) / 0.85);
+  transform: scale(1.08);
+}
+.replay-scrubber::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: rgb(var(--accent-rgb));
+  border: 2px solid rgb(10 10 13);
+  box-shadow: 0 0 8px rgb(var(--accent-rgb) / 0.6);
+  cursor: pointer;
+  transition: box-shadow 120ms ease-out, transform 120ms ease-out;
+}
+.replay-scrubber:disabled::-webkit-slider-thumb,
+.replay-scrubber:disabled::-moz-range-thumb {
+  opacity: 0.4;
+  box-shadow: none;
+  cursor: not-allowed;
+}
