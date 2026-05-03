@@ -1,0 +1,64 @@
+# Agent fleet definition. Read by api/main.py.
+# Streams: tail -F of log_path over SSH, exposed via WebSocket.
+
+agents:
+  - id: clue
+    name: Clue
+    short: bradBigDesktop
+    role: "Qwen 3.6 27B dense unsloth UD-Q4_K_XL on RTX 4090"
+    host: 100.106.249.30        # Tailscale
+    user: brad
+    key_file: /home/remote/.ssh/bradBigDesktop
+    log_path: /home/brad/.hermes/logs/agent.log
+    sessions_glob: /home/brad/.hermes/sessions/*.jsonl
+    model: qwen3.6-27b
+    icon: brain
+    # Hermes OpenAI-compatible API (uses shared API_SERVER_KEY).
+    api_server_url: http://10.0.0.136:8642
+    # llama.cpp llama-server endpoint for model-inspector
+    llama_url: http://10.0.0.136:8080
+    llama_unit: llama-server.service
+    # Per-agent Telegram bot — used to mirror dashboard exchanges back into
+    # Brad's Telegram chat with this agent.
+    telegram_bot_token_env: /home/brad/.hermes/.env
+    telegram_chat_id: "5913219338"
+
+  - id: sarah
+    name: Sarah
+    short: Junior
+    role: "Qwen 3.6 35B-A3B MoE on Radeon 780M"
+    host: 10.0.0.54              # not on Tailscale — LAN only
+    user: ubimini
+    key_file: /home/remote/.ssh/id_ed25519
+    log_path: /home/ubimini/.hermes/logs/agent.log
+    sessions_glob: /home/ubimini/.hermes/sessions/*.jsonl
+    model: qwen3.6-35b-a3b
+    icon: brain
+    api_server_url: http://10.0.0.54:8642
+    llama_url: http://10.0.0.54:8080
+    llama_unit: llama-server.service
+    telegram_bot_token_env: /home/ubimini/.hermes/.env
+    telegram_chat_id: "5913219338"
+
+  - id: claude_natalie
+    name: Claude
+    short: this session
+    role: "Claude Opus 4.7 — orchestrator + builder"
+    host: localhost
+    user: remote
+    # OpenClaw rotates logs by gateway-start date. Glob picks the most-recent
+    # file at read time so we always tail the active log.
+    log_path_glob: /tmp/openclaw/openclaw-*.log
+    # Claude Code's session transcript — Brad's prompts + my replies.
+    sessions_glob: /home/remote/.claude/projects/-home-remote/*.jsonl
+    chat_format: claude_code
+    model: claude-opus-4-7
+    icon: orchestrator
+    webhook_host_local: null
+    webhook_port: null
+    # Claude's bot is poller-only (MCP server, no inbound HTTP). Dashboard
+    # sends route through here as a one-way push to Brad's chat — they show
+    # up on Brad's phone but don't trigger a reply from Claude.
+    telegram_bot_token_env_local: /home/remote/.claude/channels/telegram/.env
+    telegram_chat_id: "5913219338"
+    push_only: true

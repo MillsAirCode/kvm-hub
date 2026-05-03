@@ -1,0 +1,65 @@
+# Secrets — NEVER commit
+.api_key
+.hermes_api_key
+.guac_admin_password
+.pg_password
+*.env
+.env
+.env.local
+.env.*.local
+secrets/
+*.pem
+*.key
+*.crt
+api/tls.*
+
+# User data / runtime state
+tasks.db
+tasks.db-journal
+tasks.db-wal
+tasks.db-shm
+data/
+runtime/
+*.sqlite
+*.sqlite-journal
+
+# Build artifacts
+dashboard/dist/
+dashboard/node_modules/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Python venvs
+api/venv/
+venv/
+.venv/
+env/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+*.iml
+
+# Backup files (we make a lot of these via sed -i.bak)
+*.bak
+*.bak.*
+*~
+
+# Logs
+*.log
+logs/
+
+# Test outputs / temp
+.pytest_cache/
+.coverage
+.ruff_cache/
+.mypy_cache/
+.tox/
+
+# Scratchpad — kept locally, not version-tracked (multi-agent edits would conflict)
+scratchpad.md
