@@ -241,6 +241,16 @@ export default function App() {
     window.location.hash = tab === "live" ? "" : tab;
   }, [tab]);
 
+  // Listen for hash changes (e.g. from Playwright or back/forward navigation)
+  useEffect(() => {
+    const onHash = () => {
+      const h = window.location.hash.replace("#", "").replace(/^key=.*/, "");
+      if ((TABS as string[]).includes(h)) setTab(h as Tab);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     let timer: number | null = null;

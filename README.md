@@ -2,6 +2,14 @@
 
 Fleet operations dashboard for managing machines, AI agents, and services from a single UI. Built for homelabs and small GPU clusters running local LLMs.
 
+![Live View](docs/screenshots/live.png)
+
+![Agent Panels](docs/screenshots/agents.png)
+
+![Task Board](docs/screenshots/tasks.png)
+
+![Setup](docs/screenshots/setup.png)
+
 ## What it does
 
 - **Live view** — real-time workflow graph showing agent-to-agent interactions, activity feed, broadcast messaging
