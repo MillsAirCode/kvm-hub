@@ -234,7 +234,7 @@ export default function CommandPalette({
     acts.push({
       id: "open-scratchpad",
       title: "Open Scratchpad",
-      hint: "/home/remote/kvm-hub/scratchpad.md",
+      hint: "scratchpad.md",
       group: "Action",
       icon: "📝",
       run: () => { onOpenScratch(); onClose(); },

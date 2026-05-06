@@ -50,7 +50,7 @@ export default function ScratchDrawer({
           <ScratchPad />
         </div>
         <div className="text-[10px] text-zinc-600 font-mono px-4 py-2 border-t border-ink-800">
-          /home/remote/kvm-hub/scratchpad.md · esc to close
+          scratchpad.md · esc to close
         </div>
       </div>
     </div>

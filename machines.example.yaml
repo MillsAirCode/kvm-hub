@@ -1,0 +1,25 @@
+# Machine fleet definition. Copy to machines.yaml and customize.
+# IPs can be LAN (10.x), Tailscale (100.x), or any reachable address.
+
+machines:
+  - id: my-workstation
+    name: "Workstation"
+    icon: desktop         # desktop | minipc | server | laptop | pi | retro
+    role: "GPU workstation, runs LLM inference"
+    protocol: ssh
+    hostname: 10.0.0.100
+    lan_ip: 10.0.0.100
+    mac: "aa:bb:cc:dd:ee:ff"
+    username: myuser
+    key_file: ~/.ssh/id_ed25519
+
+  - id: my-server
+    name: "Server"
+    icon: server
+    role: "Docker host, runs services"
+    protocol: ssh
+    hostname: 10.0.0.101
+    lan_ip: 10.0.0.101
+    mac: "11:22:33:44:55:66"
+    username: myuser
+    key_file: ~/.ssh/id_ed25519

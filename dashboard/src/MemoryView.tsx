@@ -157,7 +157,10 @@ export default function MemoryView() {
     const tick = async () => {
       try {
         const params = new URLSearchParams({ limit: "60" });
-        if (conclusionsScope === "me") params.set("observed_id", "5913219338");
+        if (conclusionsScope === "me") {
+          const userId = localStorage.getItem("kvmhub.userId") || "";
+          if (userId) params.set("observed_id", userId);
+        }
         const r = await fetch(`/api/memory/conclusions?${params}`);
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const d = (await r.json()) as { items: Conclusion[]; total: number; error?: string };

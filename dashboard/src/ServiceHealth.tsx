@@ -14,11 +14,9 @@ type Service = {
   description: string;
 };
 
-const HOST_LABEL: Record<string, string> = {
-  natalie: "Natalie",
-  clue: "Clue (bradBigDesktop)",
-  sarah: "Sarah (Junior)",
-};
+// Host labels are derived from the service's host field.
+// No hardcoded machine names - the API provides them.
+const HOST_LABEL: Record<string, string> = {};
 
 function statusPill(s: Service): { label: string; cls: string } {
   if (!s.active) return { label: "DOWN", cls: "text-rose-300" };

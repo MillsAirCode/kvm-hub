@@ -13,6 +13,13 @@ secrets/
 *.crt
 api/tls.*
 
+# User fleet config (contains IPs, SSH keys, personal data)
+# Copy from *.example.yaml and customize
+machines.yaml
+agents.yaml
+services.yaml
+settings.yaml
+
 # User data / runtime state
 tasks.db
 tasks.db-journal
