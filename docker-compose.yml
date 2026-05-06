@@ -37,7 +37,7 @@ services:
       POSTGRES_PASSWORD: ${PG_PASSWORD}
       WEBAPP_CONTEXT: ROOT
     ports:
-      - "100.104.140.85:8080:8080"
+      - "${GUAC_BIND_IP:-0.0.0.0}:8080:8080"
     networks: [guac]
 
 volumes:

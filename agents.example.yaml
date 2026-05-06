@@ -1,0 +1,20 @@
+# Agent fleet definition. Copy to agents.yaml and customize.
+# Each agent is an LLM running on a machine in your fleet.
+
+agents:
+  - id: my-agent
+    name: MyAgent
+    short: workstation
+    role: "Qwen 3 27B on GPU workstation"
+    host: 10.0.0.100
+    user: myuser
+    key_file: ~/.ssh/id_ed25519
+    log_path: ~/.hermes/logs/agent.log
+    sessions_glob: ~/.hermes/sessions/*.jsonl
+    model: qwen3-27b
+    icon: brain
+    api_server_url: http://10.0.0.100:8642
+    llama_url: http://10.0.0.100:8080
+    llama_unit: llama-server.service
+    telegram_bot_token_env: ~/.hermes/.env
+    telegram_chat_id: ""

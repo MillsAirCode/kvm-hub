@@ -1,11 +1,12 @@
 """Sync Guacamole connections from machines.yaml. Idempotent.
 
-Reads /home/remote/kvm-hub/machines.yaml, ensures each machine has a Guacamole
+Reads machines.yaml, ensures each machine has a Guacamole
 connection. Existing connections are not modified — delete them by hand if you
 want to recreate.
 """
 from __future__ import annotations
 import json
+import os
 import sys
 import urllib.error
 import urllib.parse
@@ -15,7 +16,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-GUAC_BASE = "http://100.104.140.85:8080"
+GUAC_BASE = os.environ.get("GUAC_BASE", "http://localhost:8080")
 DATA_SOURCE = "postgresql"
 ADMIN_PASS_FILE = ROOT / ".guac_admin_password"
 MACHINES_FILE = ROOT / "machines.yaml"

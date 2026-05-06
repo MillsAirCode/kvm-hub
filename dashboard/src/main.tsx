@@ -20,7 +20,7 @@ if (hashMatch) {
 
 if (!apiKey) {
   const prompted = window.prompt(
-    "KVM Hub API key required. Paste the value from /home/remote/kvm-hub/.api_key:",
+    "KVM Hub API key required. Paste the value from .api_key in your KVM Hub directory:",
   );
   if (prompted) {
     apiKey = prompted.trim();

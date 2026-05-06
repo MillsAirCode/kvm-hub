@@ -5,6 +5,7 @@ import FleetView from "./FleetView";
 import LogsView from "./LogsView";
 import MemoryView from "./MemoryView";
 import Tasks from "./Tasks";
+import SettingsView from "./SettingsView";
 import CommandPalette from "./CommandPalette";
 import TelegramSidebar from "./TelegramSidebar";
 import Notifications, { MUTE_KEY } from "./Notifications";
@@ -17,9 +18,9 @@ import KeyboardHelp from "./KeyboardHelp";
 import MobileBottomTabBar from "./MobileBottomTabBar";
 import TimeOfDayTheme from "./TimeOfDayTheme";
 
-export type Tab = "live" | "agents" | "fleet" | "logs" | "memory" | "tasks";
+export type Tab = "live" | "agents" | "fleet" | "logs" | "memory" | "tasks" | "setup";
 
-const TABS: Tab[] = ["live", "agents", "fleet", "logs", "memory", "tasks"];
+const TABS: Tab[] = ["live", "agents", "fleet", "logs", "memory", "tasks", "setup"];
 
 const TAB_HINTS: Record<Tab, string> = {
   live: "workflow + activity stream",
@@ -28,6 +29,7 @@ const TAB_HINTS: Record<Tab, string> = {
   logs: "live log tail · filter · per-agent",
   memory: "Honcho shared memory",
   tasks: "shared task queue",
+  setup: "fleet configuration",
 };
 
 export const TAB_ICONS: Record<Tab, ReactNode> = {
@@ -66,6 +68,12 @@ export const TAB_ICONS: Record<Tab, ReactNode> = {
     <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <rect x="4" y="4" width="16" height="16" rx="2" />
       <path d="M9 8h6M9 12h6M9 16h4" />
+    </svg>
+  ),
+  setup: (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
   ),
 };
@@ -289,6 +297,7 @@ export default function App() {
         {tab === "logs" && <LogsView />}
         {tab === "memory" && <MemoryView />}
         {tab === "tasks" && <Tasks />}
+        {tab === "setup" && <SettingsView />}
       </div>
       <footer className="mt-10 text-xs text-zinc-600">
         Tailscale-only · {window.location.host}

@@ -109,7 +109,7 @@ export default function BootSequence({ onComplete }: { onComplete: () => void })
       }
 
       await append("");
-      await append("Memory · Honcho · 100.104.140.85:8000   ✓", 100);
+      await append("Memory · Honcho                         ✓", 100);
       await append("Telegram bridge                         ✓", 100);
       await append("Workflow event bus                      ✓", 100);
       await append("");

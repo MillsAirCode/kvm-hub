@@ -220,17 +220,19 @@ async def health() -> dict:
     only if every dep returns true."""
     honcho_url = f"{HONCHO_BASE}/v3/workspaces/{HONCHO_WORKSPACE}/peers/list"
     sqlite_probe = _probe_sqlite(TASKS_DB_FILE)
-    honcho_p, llama_clue_p, llama_sarah_p = await asyncio.gather(
-        _probe_http(honcho_url, "POST"),
-        _probe_http("http://10.0.0.136:8080/v1/models"),
-        _probe_http("http://10.0.0.54:8080/v1/models"),
-    )
-    deps = {
-        "honcho": honcho_p,
-        "llama_clue": llama_clue_p,
-        "llama_sarah": llama_sarah_p,
-        "sqlite_tasks": sqlite_probe,
-    }
+    # Probe each agent's llama-server dynamically from agents.yaml
+    agents = _agents_yaml.get().get("agents", []) or []
+    llama_probes = {}
+    probe_tasks = [_probe_http(honcho_url, "POST")]
+    probe_keys = ["honcho"]
+    for ag in agents:
+        url = ag.get("llama_url", "")
+        if url:
+            probe_tasks.append(_probe_http(f"{url}/v1/models"))
+            probe_keys.append(f"llama_{ag['id']}")
+    results = await asyncio.gather(*probe_tasks)
+    deps = dict(zip(probe_keys, results))
+    deps["sqlite_tasks"] = sqlite_probe
     return {"ok": all(d["ok"] for d in deps.values()), "deps": deps}
 
 
@@ -766,18 +768,27 @@ async def _relay_to_telegram(agent: dict, user_msg: str, reply: str | None) -> N
 @app.post("/api/agents/{agent_id}/restart")
 async def restart_agent(agent_id: str) -> dict:
     """SSH to the agent's host and restart its Hermes gateway + llama-server
-    user units. Returns ok + per-unit stdout/stderr. Bounded 60s timeout."""
+    user units. Returns ok + per-unit stdout/stderr. Bounded 60s timeout.
+
+    Agents may set a `restart:` block in agents.yaml to override the default
+    target (Sarah uses this — her llama-server lives on Junior while the
+    shared gateway on bradBigDesktop must not be touched, since it would
+    kick Clue too)."""
     agent = find_agent(agent_id)
-    host = agent.get("host", "localhost")
-    user = agent.get("user", "remote")
-    key_file = agent.get("key_file")
+    override = agent.get("restart") or {}
+    host = override.get("ssh_host") or agent.get("host", "localhost")
+    user = override.get("ssh_user") or agent.get("user", "remote")
+    key_file = override.get("key_file") or agent.get("key_file")
 
     if host == "localhost" or host == "127.0.0.1":
         # Restart of the local orchestrator host — refuse, we'd be killing
         # ourselves. The orchestrator is supposed to be the canary.
         raise HTTPException(400, "cannot restart the orchestrator host from itself")
 
-    cmd = "systemctl --user restart hermes-gateway.service llama-server.service && systemctl --user is-active hermes-gateway.service llama-server.service"
+    cmd = override.get("cmd") or (
+        "systemctl --user restart hermes-gateway.service llama-server.service"
+        " && systemctl --user is-active hermes-gateway.service llama-server.service"
+    )
     ssh_args = [
         "ssh", "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
         "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5",
@@ -800,8 +811,11 @@ async def restart_agent(agent_id: str) -> dict:
 
     out = stdout.decode("utf-8", "replace").strip()
     err = stderr.decode("utf-8", "replace").strip()
-    # is-active should print "active\nactive" if both came back
-    success = proc.returncode == 0 and out.count("active") >= 2
+    # Default cmd restarts 2 units (gateway + llama) so expects 2 "active"
+    # lines from is-active. Override restarts may restart 1 — at minimum
+    # require one "active" line and a clean rc.
+    min_active = 2 if not override else 1
+    success = proc.returncode == 0 and out.count("active") >= min_active
 
     # Emit a workflow event so the dashboard's WorkflowGraph + Notifications
     # animate with the restart.
@@ -1315,13 +1329,11 @@ async def agent_toolkits(agent_id: str) -> list[dict]:
             {"id": f"{agent['id']}:{t['key']}", **t}
             for t in CLAUDE_CODE_TOOLKITS
         ]
-    # Pick the right venv path. Clue: hermes-agent. Sarah: hermes-venv + claude-code.
-    if agent["id"] == "clue":
-        cmd = "cd ~/.hermes/hermes-agent && ./venv/bin/python -m hermes_cli.main tools list 2>&1"
-    elif agent["id"] == "sarah":
-        cmd = "cd ~/claude-code && ~/hermes-venv/bin/python -m hermes_cli.main tools list 2>&1"
-    else:
-        return []
+    # Build hermes tools list command dynamically
+    hermes_bin = os.environ.get("HERMES_BIN", "hermes")
+    profile = agent.get("hermes_profile", "")
+    profile_flag = f" -p {profile}" if profile else ""
+    cmd = f"{hermes_bin}{profile_flag} tools list 2>&1"
     proc = await asyncio.create_subprocess_exec(
         "ssh", "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
         "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5",
@@ -1806,43 +1818,52 @@ class GpuStats(BaseModel):
     error: str | None = None
 
 
-HOST_REGISTRY: dict[str, dict] = {
-    "natalie": {
-        "label": "Natalie (UM690)",
-        "ssh_user": None,
-        "ssh_host": None,
-        "key_file": None,
-        "gpu_kind": None,
-        "iperf_addr": "10.0.0.119",     # local iperf3 client/server target
-    },
-    "bradbigdesktop": {
-        "label": "Clue's box (4090)",
-        "ssh_user": "brad",
-        "ssh_host": "10.0.0.136",
-        "key_file": "/home/remote/.ssh/bradBigDesktop",
-        "gpu_kind": "nvidia",
-        "iperf_addr": "10.0.0.136",
-    },
-    "junior": {
-        # Brad's preferred display name — Sarah is the agent persona on this host
-        "label": "Sarah's box (Radeon 780M)",
-        "ssh_user": "ubimini",
-        "ssh_host": "10.0.0.54",
-        "key_file": "/home/remote/.ssh/id_ed25519",
-        "gpu_kind": "amd",
-        "iperf_addr": "10.0.0.54",
-    },
-    "plex": {
-        "label": "Plex box (Venus series)",
-        "ssh_user": "brad",
-        "ssh_host": "10.0.0.10",
-        "key_file": "/home/remote/.ssh/id_ed25519",
-        "gpu_kind": None,
-        "iperf_addr": "10.0.0.10",
-    },
-}
+def _build_host_registry() -> dict[str, dict]:
+    """Build HOST_REGISTRY dynamically from machines.yaml."""
+    registry = {}
+    for m in load_machines():
+        mid = m["id"]
+        is_local = (m.get("hostname") in ("localhost", "127.0.0.1") or
+                    mid == os.environ.get("KVM_HUB_LOCAL_MACHINE", ""))
+        registry[mid] = {
+            "label": m.get("name", mid),
+            "ssh_user": None if is_local else m.get("username"),
+            "ssh_host": None if is_local else m.get("hostname"),
+            "key_file": None if is_local else m.get("key_file"),
+            "gpu_kind": m.get("gpu_kind"),  # set in machines.yaml if needed
+            "iperf_addr": m.get("lan_ip") or m.get("hostname"),
+        }
+    return registry
 
-HOSTS_WITH_GPU = {k: v for k, v in HOST_REGISTRY.items() if v.get("gpu_kind") == "nvidia"}
+
+def _get_host_registry() -> dict[str, dict]:
+    return _build_host_registry()
+
+
+def _get_hosts_with_gpu() -> dict[str, dict]:
+    return {k: v for k, v in _get_host_registry().items() if v.get("gpu_kind") == "nvidia"}
+
+
+# Backward compat: use property-like access. These are rebuilt on each call
+# so they reflect machines.yaml changes without restart.
+class _HostRegistryProxy(dict):
+    def __getitem__(self, key): return _get_host_registry()[key]
+    def get(self, key, default=None): return _get_host_registry().get(key, default)
+    def __contains__(self, key): return key in _get_host_registry()
+    def __iter__(self): return iter(_get_host_registry())
+    def keys(self): return _get_host_registry().keys()
+    def values(self): return _get_host_registry().values()
+    def items(self): return _get_host_registry().items()
+    def __len__(self): return len(_get_host_registry())
+
+HOST_REGISTRY = _HostRegistryProxy()
+HOSTS_WITH_GPU = type("_GpuProxy", (), {
+    "__contains__": lambda s, k: k in _get_hosts_with_gpu(),
+    "__iter__": lambda s: iter(_get_hosts_with_gpu()),
+    "keys": lambda s: _get_hosts_with_gpu().keys(),
+    "items": lambda s: _get_hosts_with_gpu().items(),
+    "get": lambda s, k, d=None: _get_hosts_with_gpu().get(k, d),
+})()
 
 
 # ── Host history (ring buffer for sparklines) ───────────────────────────
@@ -1850,10 +1871,12 @@ HOSTS_WITH_GPU = {k: v for k, v in HOST_REGISTRY.items() if v.get("gpu_kind") ==
 # the history is empty (acceptable — sparklines just show what's been seen).
 from collections import deque
 _HOST_HIST_LEN = 30
-_HOST_HISTORY: dict[str, deque] = {h: deque(maxlen=_HOST_HIST_LEN) for h in HOST_REGISTRY}
+_HOST_HISTORY: dict[str, deque] = {}
 
 
 def _push_host_sample(host_id: str, sample: dict) -> None:
+    if host_id not in _HOST_HISTORY:
+        _HOST_HISTORY[host_id] = deque(maxlen=_HOST_HIST_LEN)
     buf = _HOST_HISTORY.get(host_id)
     if buf is None:
         return
@@ -2480,8 +2503,8 @@ async def host_gpu(host_id: str) -> dict:
 # ── Memory / Honcho proxy ────────────────────────────────────────────────
 
 
-HONCHO_BASE = os.environ.get("HONCHO_BASE", "http://100.104.140.85:8000")
-HONCHO_WORKSPACE = "hermes"
+HONCHO_BASE = os.environ.get("HONCHO_BASE", "http://localhost:8000")
+HONCHO_WORKSPACE = os.environ.get("HONCHO_WORKSPACE", "hermes")
 
 
 @app.get("/api/memory/conclusions")
@@ -3147,21 +3170,24 @@ async def host_kill(host_id: str, pid: int, body: KillBody):
 
 # ── Network ping matrix ─────────────────────────────────────────────────
 
-# Sources (ssh-reachable) × Targets. Latency in ms.
-_PING_SOURCES = [
-    {"id": "natalie", "label": "Natalie", "ssh": None},
-    {"id": "clue",    "label": "Clue",    "ssh_user": "brad",    "ssh_host": "100.106.249.30",
-     "key_file": "/home/remote/.ssh/bradBigDesktop"},
-    {"id": "sarah",   "label": "Sarah",   "ssh_user": "ubimini", "ssh_host": "10.0.0.54",
-     "key_file": "/home/remote/.ssh/id_ed25519"},
-]
-_PING_TARGETS = [
-    {"id": "natalie", "label": "Natalie", "ip": "10.0.0.119"},
-    {"id": "clue",    "label": "Clue",    "ip": "10.0.0.136"},
-    {"id": "sarah",   "label": "Sarah",   "ip": "10.0.0.54"},
-    {"id": "pi",      "label": "Pi",      "ip": "10.0.0.102"},
-    {"id": "ha",      "label": "HA",      "ip": "10.0.0.10"},
-]
+# Sources (ssh-reachable) × Targets. Built dynamically from machines.yaml.
+def _build_ping_sources() -> list[dict]:
+    sources = []
+    local_id = os.environ.get("KVM_HUB_LOCAL_MACHINE", "")
+    for m in load_machines():
+        is_local = (m["id"] == local_id or m.get("hostname") in ("localhost", "127.0.0.1"))
+        sources.append({
+            "id": m["id"], "label": m.get("name", m["id"]),
+            "ssh": None if is_local else True,
+            "ssh_user": m.get("username"), "ssh_host": m.get("hostname"),
+            "key_file": m.get("key_file"),
+        })
+    return sources
+
+def _build_ping_targets() -> list[dict]:
+    return [{"id": m["id"], "label": m.get("name", m["id"]),
+             "ip": m.get("lan_ip") or m.get("hostname")}
+            for m in load_machines()]
 
 _PING_CACHE: dict[str, tuple[float, dict]] = {}
 _PING_TTL = 25.0
@@ -3203,15 +3229,18 @@ async def network_ping_matrix() -> dict:
     if cached and (now - cached[0]) < _PING_TTL:
         return cached[1]
 
+    ping_sources = _build_ping_sources()
+    ping_targets = _build_ping_targets()
+
     async def row_for(src: dict) -> dict:
         cells = await asyncio.gather(*(
             _matrix_ping_one(src, t["ip"])
-            for t in _PING_TARGETS
+            for t in ping_targets
             if t["id"] != src["id"]  # skip self-ping
         ))
         out = {}
         i = 0
-        for t in _PING_TARGETS:
+        for t in ping_targets:
             if t["id"] == src["id"]:
                 out[t["id"]] = None  # self
             else:
@@ -3219,12 +3248,12 @@ async def network_ping_matrix() -> dict:
                 i += 1
         return out
 
-    rows = await asyncio.gather(*(row_for(s) for s in _PING_SOURCES))
+    rows = await asyncio.gather(*(row_for(s) for s in ping_sources))
     result = {
-        "sources": [{"id": s["id"], "label": s["label"]} for s in _PING_SOURCES],
-        "targets": [{"id": t["id"], "label": t["label"]} for t in _PING_TARGETS],
+        "sources": [{"id": s["id"], "label": s["label"]} for s in ping_sources],
+        "targets": [{"id": t["id"], "label": t["label"]} for t in ping_targets],
         "matrix": {
-            _PING_SOURCES[i]["id"]: rows[i] for i in range(len(_PING_SOURCES))
+            ping_sources[i]["id"]: rows[i] for i in range(len(ping_sources))
         },
         "captured_ts": int(now),
     }
@@ -3244,17 +3273,30 @@ def _next_cron_run(expr: str) -> int | None:
         return None
 
 
-CRON_SOURCES = [
-    {"id": "natalie", "label": "Natalie", "ssh": None},
-    {"id": "clue", "label": "Clue (bradBigDesktop)",
-     "ssh_user": "brad", "ssh_host": "10.0.0.136",
-     "key_file": "/home/remote/.ssh/bradBigDesktop",
-     "hermes_bin": "/home/brad/.local/bin/hermes"},
-    {"id": "sarah", "label": "Sarah (Junior)",
-     "ssh_user": "ubimini", "ssh_host": "10.0.0.54",
-     "key_file": "/home/remote/.ssh/id_ed25519",
-     "hermes_bin": "/home/ubimini/hermes-venv/bin/hermes"},
-]
+def _build_cron_sources() -> list[dict]:
+    """Build cron sources dynamically from agents.yaml + machines.yaml."""
+    sources = [{"id": "local", "label": "Local", "ssh": None}]
+    for ag in (_agents_yaml.get().get("agents", []) or []):
+        mcfg = None
+        for m in load_machines():
+            if m.get("hostname") == ag.get("host") or m.get("id") == ag.get("host"):
+                mcfg = m
+                break
+        sources.append({
+            "id": ag["id"],
+            "label": ag.get("name", ag["id"]),
+            "ssh_user": ag.get("user") or (mcfg or {}).get("username"),
+            "ssh_host": ag.get("host"),
+            "key_file": ag.get("key_file") or (mcfg or {}).get("key_file"),
+            "hermes_bin": "hermes",
+        })
+    return sources
+
+
+CRON_SOURCES = type("_CronProxy", (), {
+    "__iter__": lambda s: iter(_build_cron_sources()),
+    "__len__": lambda s: len(_build_cron_sources()),
+})()
 
 
 async def _ssh_cmd(src: dict, command: str) -> tuple[int, str, str]:
@@ -3469,13 +3511,13 @@ async def activity_feed(limit: int = 80) -> dict:
 
 # ── Self-hosted tweb (Telegram Web K) static serve ─────────────────────
 # We build the open-source `tweb` SPA (github.com/morethanwords/tweb) into
-# /home/remote/tweb/dist and serve it at /tg/. This avoids the brittleness of
+# Self-hosted tweb dist served at /tg/. This avoids the brittleness of
 # reverse-proxying the official web.telegram.org (origin checks, service-worker
 # scope, baked-in API credentials). The SPA uses MTProto-over-WebSocket
 # directly from the browser to Telegram's data centres, which works from any
 # origin.
 
-TWEB_DIST = Path("/home/remote/tweb/public")
+TWEB_DIST = Path(os.environ.get("TWEB_DIST", str(ROOT.parent / "tweb" / "public")))
 
 
 _TWEB_ASSET_EXTS = {
@@ -3519,6 +3561,311 @@ def telegram_index_redirect():
         status_code=307,
         headers={"Location": "/tg/"},
     )
+
+
+# -- Config CRUD API --------------------------------------------------------
+# Endpoints for managing machines, agents, and services via the UI.
+# Reads/writes the YAML files and forces cache refresh on write.
+
+SETTINGS_FILE = ROOT / "settings.yaml"
+_settings_yaml = _YamlCache(SETTINGS_FILE, ttl=10.0)
+
+
+def _atomic_yaml_write(path: Path, key: str, data: list[dict]) -> None:
+    """Write a YAML list atomically and refresh the cache."""
+    content = yaml.dump({key: data}, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    tmp = path.with_suffix(".yaml.tmp")
+    tmp.write_text(content)
+    os.replace(str(tmp), str(path))
+    # Force cache refresh
+    for cache in (_machines_yaml, _agents_yaml, _services_yaml, _settings_yaml):
+        if cache.path == path:
+            cache._refresh()
+            break
+
+
+class MachineConfig(BaseModel):
+    id: str
+    name: str
+    icon: str = "desktop"
+    role: str = ""
+    protocol: str = "ssh"
+    hostname: str = ""
+    lan_ip: str = ""
+    mac: str = ""
+    username: str = ""
+    key_file: str = ""
+    password: str | None = None
+
+
+class AgentConfig(BaseModel):
+    id: str
+    name: str
+    short: str = ""
+    role: str = ""
+    host: str = ""
+    user: str = ""
+    key_file: str = ""
+    log_path: str = ""
+    sessions_glob: str = ""
+    model: str = ""
+    icon: str = "brain"
+    api_server_url: str = ""
+    llama_url: str = ""
+    llama_unit: str = ""
+    telegram_bot_token_env: str = ""
+    telegram_chat_id: str = ""
+
+
+class ServiceConfig(BaseModel):
+    id: str
+    name: str
+    host: str = ""
+    type: str = "systemd_user_local"
+    unit: str = ""
+    container: str = ""
+    ssh_user: str = ""
+    ssh_host: str = ""
+    key_file: str = ""
+    kind: str = "normal"
+    description: str = ""
+
+
+class SshTestRequest(BaseModel):
+    hostname: str
+    username: str
+    key_file: str = ""
+    password: str | None = None
+
+
+# ── Machines CRUD ──
+
+@app.get("/api/config/machines")
+async def config_list_machines():
+    return load_machines()
+
+
+@app.post("/api/config/machines")
+async def config_create_machine(cfg: MachineConfig):
+    machines = load_machines()
+    if any(m["id"] == cfg.id for m in machines):
+        raise HTTPException(409, f"machine '{cfg.id}' already exists")
+    machines.append(cfg.model_dump(exclude_none=True))
+    _atomic_yaml_write(MACHINES_FILE, "machines", machines)
+    return {"ok": True, "id": cfg.id}
+
+
+@app.put("/api/config/machines/{machine_id}")
+async def config_update_machine(machine_id: str, cfg: MachineConfig):
+    machines = load_machines()
+    idx = next((i for i, m in enumerate(machines) if m["id"] == machine_id), None)
+    if idx is None:
+        raise HTTPException(404, f"machine '{machine_id}' not found")
+    machines[idx] = cfg.model_dump(exclude_none=True)
+    _atomic_yaml_write(MACHINES_FILE, "machines", machines)
+    return {"ok": True}
+
+
+@app.delete("/api/config/machines/{machine_id}")
+async def config_delete_machine(machine_id: str):
+    machines = load_machines()
+    before = len(machines)
+    machines = [m for m in machines if m["id"] != machine_id]
+    if len(machines) == before:
+        raise HTTPException(404, f"machine '{machine_id}' not found")
+    _atomic_yaml_write(MACHINES_FILE, "machines", machines)
+    return {"ok": True}
+
+
+# ── Agents CRUD ──
+
+def _load_agents() -> list[dict]:
+    return _agents_yaml.get().get("agents", []) or []
+
+
+@app.get("/api/config/agents")
+async def config_list_agents():
+    return _load_agents()
+
+
+@app.post("/api/config/agents")
+async def config_create_agent(cfg: AgentConfig):
+    agents = _load_agents()
+    if any(a["id"] == cfg.id for a in agents):
+        raise HTTPException(409, f"agent '{cfg.id}' already exists")
+    agents.append(cfg.model_dump(exclude_none=True))
+    _atomic_yaml_write(AGENTS_FILE, "agents", agents)
+    return {"ok": True, "id": cfg.id}
+
+
+@app.put("/api/config/agents/{agent_id}")
+async def config_update_agent(agent_id: str, cfg: AgentConfig):
+    agents = _load_agents()
+    idx = next((i for i, a in enumerate(agents) if a["id"] == agent_id), None)
+    if idx is None:
+        raise HTTPException(404, f"agent '{agent_id}' not found")
+    agents[idx] = cfg.model_dump(exclude_none=True)
+    _atomic_yaml_write(AGENTS_FILE, "agents", agents)
+    return {"ok": True}
+
+
+@app.delete("/api/config/agents/{agent_id}")
+async def config_delete_agent(agent_id: str):
+    agents = _load_agents()
+    before = len(agents)
+    agents = [a for a in agents if a["id"] != agent_id]
+    if len(agents) == before:
+        raise HTTPException(404, f"agent '{agent_id}' not found")
+    _atomic_yaml_write(AGENTS_FILE, "agents", agents)
+    return {"ok": True}
+
+
+# ── Services CRUD ──
+
+def _load_services_raw() -> list[dict]:
+    return _services_yaml.get().get("services", []) or []
+
+
+@app.get("/api/config/services")
+async def config_list_services_raw():
+    return _load_services_raw()
+
+
+@app.post("/api/config/services")
+async def config_create_service(cfg: ServiceConfig):
+    services = _load_services_raw()
+    if any(s["id"] == cfg.id for s in services):
+        raise HTTPException(409, f"service '{cfg.id}' already exists")
+    services.append(cfg.model_dump(exclude_none=True))
+    _atomic_yaml_write(SERVICES_FILE, "services", services)
+    return {"ok": True, "id": cfg.id}
+
+
+@app.put("/api/config/services/{service_id}")
+async def config_update_service(service_id: str, cfg: ServiceConfig):
+    services = _load_services_raw()
+    idx = next((i for i, s in enumerate(services) if s["id"] == service_id), None)
+    if idx is None:
+        raise HTTPException(404, f"service '{service_id}' not found")
+    services[idx] = cfg.model_dump(exclude_none=True)
+    _atomic_yaml_write(SERVICES_FILE, "services", services)
+    return {"ok": True}
+
+
+@app.delete("/api/config/services/{service_id}")
+async def config_delete_service(service_id: str):
+    services = _load_services_raw()
+    before = len(services)
+    services = [s for s in services if s["id"] != service_id]
+    if len(services) == before:
+        raise HTTPException(404, f"service '{service_id}' not found")
+    _atomic_yaml_write(SERVICES_FILE, "services", services)
+    return {"ok": True}
+
+
+# ── General settings ──
+
+@app.get("/api/config/general")
+async def config_get_general():
+    return _settings_yaml.get()
+
+
+@app.put("/api/config/general")
+async def config_put_general(request: Request):
+    body = await request.json()
+    content = yaml.dump(body, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    tmp = SETTINGS_FILE.with_suffix(".yaml.tmp")
+    tmp.write_text(content)
+    os.replace(str(tmp), str(SETTINGS_FILE))
+    _settings_yaml._refresh()
+    return {"ok": True}
+
+
+# ── SSH connectivity test ──
+
+@app.post("/api/config/test-ssh")
+async def config_test_ssh(req: SshTestRequest):
+    args = ["ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes",
+            "-o", "StrictHostKeyChecking=accept-new"]
+    if req.key_file:
+        args += ["-i", req.key_file]
+    args += [f"{req.username}@{req.hostname}", "echo ok"]
+    start = time.perf_counter()
+    code, stdout, stderr = await _run(args, timeout=10.0)
+    elapsed = (time.perf_counter() - start) * 1000
+    if code == 0 and "ok" in stdout:
+        return {"ok": True, "latency_ms": round(elapsed, 1)}
+    return {"ok": False, "error": stderr.strip() or stdout.strip() or "connection failed",
+            "latency_ms": round(elapsed, 1)}
+
+
+# ── Config status (for setup wizard) ──
+
+@app.get("/api/config/status")
+async def config_status():
+    return {
+        "has_machines": len(load_machines()) > 0,
+        "has_agents": len(_load_agents()) > 0,
+        "has_services": len(_load_services_raw()) > 0,
+    }
+
+
+# ── Service discovery (for setup wizard) ──
+
+@app.post("/api/config/discover-services/{machine_id}")
+async def config_discover_services(machine_id: str):
+    mcfg = find_machine(machine_id)
+    discovered = []
+
+    # Probe systemd user units
+    args = ["ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes"]
+    if mcfg.get("key_file"):
+        args += ["-i", mcfg["key_file"]]
+    target = f"{mcfg.get('username', 'root')}@{mcfg['hostname']}"
+
+    code, stdout, _ = await _run(
+        args + [target, "systemctl --user list-units --type=service --state=running --no-legend --plain"],
+        timeout=15.0,
+    )
+    if code == 0:
+        for line in stdout.strip().splitlines():
+            parts = line.split()
+            if parts:
+                unit = parts[0]
+                discovered.append({
+                    "id": unit.replace(".service", "").replace("@", "-"),
+                    "name": unit.replace(".service", ""),
+                    "type": "systemd_user_remote" if machine_id != "natalie" else "systemd_user_local",
+                    "unit": unit,
+                    "host": machine_id,
+                    "ssh_user": mcfg.get("username", ""),
+                    "ssh_host": mcfg["hostname"],
+                    "key_file": mcfg.get("key_file", ""),
+                })
+
+    # Probe docker containers
+    code, stdout, _ = await _run(
+        args + [target, "docker ps --format '{{.Names}}\t{{.Image}}\t{{.Status}}' 2>/dev/null"],
+        timeout=15.0,
+    )
+    if code == 0:
+        for line in stdout.strip().splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 1:
+                name = parts[0]
+                discovered.append({
+                    "id": f"docker-{name}",
+                    "name": name,
+                    "type": "docker_local" if machine_id == "natalie" else "docker_remote",
+                    "container": name,
+                    "host": machine_id,
+                    "description": parts[1] if len(parts) > 1 else "",
+                })
+
+    return {"machine_id": machine_id, "discovered": discovered}
+
+
+# -- End Config CRUD API ---------------------------------------------------
 
 
 # ── Static dashboard ─────────────────────────────────────────────────────
@@ -3570,7 +3917,7 @@ else:
 
 def main():
     import uvicorn
-    host = os.environ.get("KVM_HUB_HOST", "100.104.140.85")
+    host = os.environ.get("KVM_HUB_HOST", "0.0.0.0")
     port = int(os.environ.get("KVM_HUB_PORT", "8090"))
     ssl_keyfile = os.environ.get("KVM_HUB_TLS_KEY") or None
     ssl_certfile = os.environ.get("KVM_HUB_TLS_CERT") or None

@@ -4,17 +4,18 @@ Idempotent — safe to re-run. Reads passwords from sibling files in kvm-hub/.
 """
 from __future__ import annotations
 import json
+import os
 import sys
 import urllib.parse
 import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-GUAC_BASE = "http://100.104.140.85:8080"
+GUAC_BASE = os.environ.get("GUAC_BASE", "http://localhost:8080")
 DATA_SOURCE = "postgresql"
 
 ADMIN_PASS_FILE = ROOT / ".guac_admin_password"
-SSH_KEY_FILE = Path("/home/remote/.ssh/bradBigDesktop")
+SSH_KEY_FILE = Path(os.environ.get("SSH_KEY_FILE", str(Path.home() / ".ssh" / "id_ed25519")))
 
 
 def _post_form(url: str, data: dict, token: str | None = None) -> dict:
@@ -102,20 +103,25 @@ def main():
         # Re-login with new password
         token = login("guacadmin", new_admin_pass)
 
-    # Create or skip bradBigDesktop SSH connection
+    # Create connections from machines.yaml
     existing = list_connections(token)
-    target_name = "bradBigDesktop (SSH)"
-    if any(c.get("name") == target_name for c in existing.values()):
-        print(f"  connection {target_name!r} already exists — skipping create")
-    else:
-        ident = create_ssh_connection(
-            token,
-            name=target_name,
-            hostname="100.106.249.30",  # bradBigDesktop on Tailscale
-            username="brad",
-            private_key=private_key,
-        )
-        print(f"  created connection id={ident}")
+    import yaml
+    machines_file = ROOT / "machines.yaml"
+    if machines_file.exists():
+        machines = yaml.safe_load(machines_file.read_text()).get("machines", [])
+        for m in machines:
+            target_name = m.get("name", m["id"])
+            if any(c.get("name") == target_name for c in existing.values()):
+                print(f"  connection {target_name!r} already exists — skipping")
+            else:
+                ident = create_ssh_connection(
+                    token,
+                    name=target_name,
+                    hostname=m.get("hostname", ""),
+                    username=m.get("username", ""),
+                    private_key=private_key,
+                )
+                print(f"  created connection id={ident} for {target_name}")
 
     print()
     print("=== ready ===")

@@ -1,0 +1,32 @@
+# Service health & restart targets. Copy to services.yaml and customize.
+#
+# Types:
+#   systemd_user_local   - local user unit (uses systemctl --user)
+#   systemd_user_remote  - same, over SSH
+#   docker_local         - local docker container
+
+services:
+  - id: kvm-hub
+    name: KVM Hub backend
+    host: my-server
+    type: systemd_user_local
+    unit: kvm-hub.service
+    description: Dashboard API + websockets
+
+  - id: llama-server
+    name: llama-server
+    host: my-workstation
+    type: systemd_user_remote
+    unit: llama-server.service
+    ssh_user: myuser
+    ssh_host: 10.0.0.100
+    key_file: ~/.ssh/id_ed25519
+    description: LLM inference server
+
+  - id: my-container
+    name: My Container
+    host: my-server
+    type: docker_local
+    container: my-container-name
+    kind: normal
+    description: Example docker service
