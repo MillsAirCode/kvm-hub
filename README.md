@@ -1,13 +1,30 @@
-# KVM Hub
+<p align="center">
+  <img src="docs/banner.png" alt="KVM Hub" width="800" />
+</p>
 
-Fleet operations dashboard for managing machines, AI agents, and services from a single UI. Built for homelabs and small GPU clusters running local LLMs.
+<p align="center">
+  <strong>Fleet ops dashboard for homelabs and GPU clusters</strong><br>
+  Manage machines, AI agents, and services from one UI
+</p>
 
+<p align="center">
+  <a href="https://github.com/MillsAirCode/kvm-hub/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/Stack-React%20%2B%20FastAPI-blue?style=flat-square" alt="Stack">
+  <img src="https://img.shields.io/badge/Theme-Terminal%20%2F%20Phosphor-1a1a2e?style=flat-square" alt="Theme">
+</p>
+
+---
+
+### Live View
 ![Live View](docs/screenshots/live.png)
 
+### Agent Panels
 ![Agent Panels](docs/screenshots/agents.png)
 
+### Task Board
 ![Task Board](docs/screenshots/tasks.png)
 
+### Fleet Setup
 ![Setup](docs/screenshots/setup.png)
 
 ## What it does
