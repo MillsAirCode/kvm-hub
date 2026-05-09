@@ -1814,6 +1814,10 @@ class GpuStats(BaseModel):
     vram_total_mib: int | None = None
     util_pct: int | None = None
     temp_c: int | None = None
+    power_w: float | None = None
+    power_limit_w: float | None = None
+    clock_mhz: int | None = None
+    fan_pct: int | None = None
     processes: list[dict] = []
     error: str | None = None
 
@@ -2252,6 +2256,8 @@ async def host_stats(host_id: str) -> dict:
         "gpu_temp_c": (gpu or {}).get("temp_c"),
         "vram_used_mib": (gpu or {}).get("vram_used_mib"),
         "vram_total_mib": (gpu or {}).get("vram_total_mib"),
+        "gpu_power_w": (gpu or {}).get("power_w"),
+        "gpu_clock_mhz": (gpu or {}).get("clock_mhz"),
     }
     _push_host_sample(host_id, sample)
     return result
@@ -2436,7 +2442,7 @@ async def host_gpu(host_id: str) -> dict:
         "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=4",
         "-i", cfg["key_file"], f"{cfg['ssh_user']}@{cfg['ssh_host']}",
         # All three queries in one connection.
-        "nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu,temperature.gpu --format=csv,noheader,nounits"
+        "nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu,temperature.gpu,power.draw,power.limit,clocks.gr,fan.speed --format=csv,noheader,nounits"
         " ; echo '---PROCESSES---' ;"
         " nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader,nounits"
     ]
@@ -2458,7 +2464,7 @@ async def host_gpu(host_id: str) -> dict:
     gpu_line = parts[0].strip().splitlines()[0] if parts[0].strip() else ""
     procs_block = parts[1].strip() if len(parts) > 1 else ""
 
-    # Parse first GPU line: "NVIDIA GeForce RTX 4090, 22512, 24564, 1, 38"
+    # Parse first GPU line: "NVIDIA GeForce RTX 4090, 22512, 24564, 1, 38, 120.5, 480.0, 2100, 0"
     fields = [f.strip() for f in gpu_line.split(",")]
     if len(fields) < 5:
         return {"host": host_id, "available": False, "error": f"unexpected nvidia-smi output: {gpu_line[:200]}"}
@@ -2470,6 +2476,19 @@ async def host_gpu(host_id: str) -> dict:
         temp = int(fields[4])
     except Exception:
         return {"host": host_id, "available": False, "error": "parse failed"}
+    # Extended fields (power, clock, fan) — may not be present on older drivers
+    power_w = power_limit_w = clock_mhz = fan_pct = None
+    try:
+        if len(fields) > 5 and fields[5]:
+            power_w = round(float(fields[5]), 1)
+        if len(fields) > 6 and fields[6]:
+            power_limit_w = round(float(fields[6]), 1)
+        if len(fields) > 7 and fields[7]:
+            clock_mhz = int(fields[7])
+        if len(fields) > 8 and fields[8]:
+            fan_pct = int(fields[8])
+    except Exception:
+        pass  # non-critical, leave as None
 
     procs: list[dict] = []
     for ln in procs_block.splitlines():
@@ -2496,6 +2515,10 @@ async def host_gpu(host_id: str) -> dict:
         "vram_total_mib": vram_total,
         "util_pct": util,
         "temp_c": temp,
+        "power_w": power_w,
+        "power_limit_w": power_limit_w,
+        "clock_mhz": clock_mhz,
+        "fan_pct": fan_pct,
         "processes": procs,
     }
 
