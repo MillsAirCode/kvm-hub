@@ -10,6 +10,10 @@ type GpuStats = {
   vram_total_mib?: number | null;
   util_pct?: number | null;
   temp_c?: number | null;
+  power_w?: number | null;
+  power_limit_w?: number | null;
+  clock_mhz?: number | null;
+  fan_pct?: number | null;
   processes?: GpuProc[];
 };
 
@@ -77,6 +81,8 @@ type Sample = {
   gpu_temp_c: number | null;
   vram_used_mib: number | null;
   vram_total_mib: number | null;
+  gpu_power_w: number | null;
+  gpu_clock_mhz: number | null;
 };
 
 function Sparkline({
@@ -310,7 +316,7 @@ function HostCard({ stats, history }: { stats: HostStats; history: Sample[] }) {
       {/* GPU quick-glance pill (util + temp). Sits alone now that the
           host-label header has been merged into the nameplate above. */}
       {gpu?.available && (
-        <div className="flex items-center justify-end gap-2 text-[10px]">
+        <div className="flex items-center justify-end gap-2 text-[10px] flex-wrap">
           <span className="flex items-center gap-1">
             <span className="h-1.5 w-1.5 rounded-full" style={{ background: pctColor(gpu.util_pct, 30, 70) }} />
             <span className="font-mono text-zinc-300">{gpu.util_pct ?? "—"}%</span>
@@ -319,6 +325,15 @@ function HostCard({ stats, history }: { stats: HostStats; history: Sample[] }) {
             <span className="h-1.5 w-1.5 rounded-full" style={{ background: tempColor(gpu.temp_c) }} />
             <span className="font-mono text-zinc-300">{gpu.temp_c ?? "—"}°C</span>
           </span>
+          {gpu.power_w != null && (
+            <span className="flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: pctColor(gpu.power_limit_w ? (gpu.power_w / gpu.power_limit_w) * 100 : null, 60, 85) }} />
+              <span className="font-mono text-zinc-300">{gpu.power_w}W</span>
+            </span>
+          )}
+          {gpu.clock_mhz != null && (
+            <span className="font-mono text-zinc-500">{gpu.clock_mhz} MHz</span>
+          )}
         </div>
       )}
 
@@ -415,6 +430,46 @@ function HostCard({ stats, history }: { stats: HostStats; history: Sample[] }) {
               color={tempColor(gpu.temp_c)}
               yMin={20}
               yMax={90}
+            />
+          }
+        />
+      )}
+
+      {/* GPU power draw — 0 to TDP scale */}
+      {gpu?.available && gpu.power_w != null && (
+        <MetricRow
+          label="PWR"
+          value={
+            <>
+              {gpu.power_w}W
+              {gpu.power_limit_w != null && (
+                <span className="text-zinc-500"> / {gpu.power_limit_w}W</span>
+              )}
+            </>
+          }
+          bar={gpu.power_limit_w ? <Bar pct={(gpu.power_w / gpu.power_limit_w) * 100} color={pctColor(gpu.power_limit_w ? (gpu.power_w / gpu.power_limit_w) * 100 : null, 60, 85)} /> : undefined}
+          spark={
+            <Sparkline
+              values={history.map((s) => s.gpu_power_w)}
+              color={pctColor(gpu.power_limit_w ? (gpu.power_w / gpu.power_limit_w) * 100 : 50, 60, 85)}
+              yMin={0}
+              yMax={gpu.power_limit_w ?? 500}
+            />
+          }
+        />
+      )}
+
+      {/* GPU clock speed */}
+      {gpu?.available && gpu.clock_mhz != null && (
+        <MetricRow
+          label="CLK"
+          value={`${gpu.clock_mhz} MHz`}
+          spark={
+            <Sparkline
+              values={history.map((s) => s.gpu_clock_mhz)}
+              color="#7c5cff"
+              yMin={0}
+              yMax={3000}
             />
           }
         />
