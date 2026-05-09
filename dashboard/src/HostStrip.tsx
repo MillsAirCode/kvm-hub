@@ -14,6 +14,7 @@ type GpuStats = {
   power_limit_w?: number | null;
   clock_mhz?: number | null;
   fan_pct?: number | null;
+  water_temp_c?: number | null;
   processes?: GpuProc[];
 };
 
@@ -470,6 +471,22 @@ function HostCard({ stats, history }: { stats: HostStats; history: Sample[] }) {
               color="#7c5cff"
               yMin={0}
               yMax={3000}
+            />
+          }
+        />
+      )}
+
+      {/* Water loop temperature */}
+      {gpu?.available && gpu.water_temp_c != null && gpu.water_temp_c > 0 && (
+        <MetricRow
+          label="H₂O"
+          value={`${gpu.water_temp_c}°C`}
+          spark={
+            <Sparkline
+              values={[gpu.water_temp_c]}
+              color={gpu.water_temp_c > 40 ? "#f59e0b" : "#22d3ee"}
+              yMin={15}
+              yMax={50}
             />
           }
         />

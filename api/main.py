@@ -1818,6 +1818,7 @@ class GpuStats(BaseModel):
     power_limit_w: float | None = None
     clock_mhz: int | None = None
     fan_pct: int | None = None
+    water_temp_c: float | None = None
     processes: list[dict] = []
     error: str | None = None
 
@@ -2445,6 +2446,8 @@ async def host_gpu(host_id: str) -> dict:
         "nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu,temperature.gpu,power.draw,power.limit,clocks.gr,fan.speed --format=csv,noheader,nounits"
         " ; echo '---PROCESSES---' ;"
         " nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader,nounits"
+        " ; echo '---WATER---' ;"
+        " sensors nct6798-isa-0290 2>/dev/null | grep Virtual_TEMP | grep -oP '[+-]\\d+\\.\\d+' | head -1"
     ]
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -2460,6 +2463,11 @@ async def host_gpu(host_id: str) -> dict:
     if proc.returncode != 0 or not out:
         return {"host": host_id, "available": False, "error": stderr.decode(errors="replace")[:200]}
 
+    # Split into gpu / processes / water sections
+    water_block = ""
+    if "---WATER---" in out:
+        out, water_block = out.rsplit("---WATER---", 1)
+        water_block = water_block.strip()
     parts = out.split("---PROCESSES---")
     gpu_line = parts[0].strip().splitlines()[0] if parts[0].strip() else ""
     procs_block = parts[1].strip() if len(parts) > 1 else ""
@@ -2507,6 +2515,16 @@ async def host_gpu(host_id: str) -> dict:
         except Exception:
             pass
 
+    # Parse water loop temp from sensors output
+    water_temp = None
+    if water_block:
+        try:
+            water_temp = round(float(water_block), 1)
+            if water_temp <= 0:
+                water_temp = None  # sensor disconnected
+        except Exception:
+            pass
+
     return {
         "host": host_id,
         "available": True,
@@ -2519,6 +2537,7 @@ async def host_gpu(host_id: str) -> dict:
         "power_limit_w": power_limit_w,
         "clock_mhz": clock_mhz,
         "fan_pct": fan_pct,
+        "water_temp_c": water_temp,
         "processes": procs,
     }
 
