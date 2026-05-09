@@ -2259,6 +2259,7 @@ async def host_stats(host_id: str) -> dict:
         "vram_total_mib": (gpu or {}).get("vram_total_mib"),
         "gpu_power_w": (gpu or {}).get("power_w"),
         "gpu_clock_mhz": (gpu or {}).get("clock_mhz"),
+        "water_temp_c": (gpu or {}).get("water_temp_c"),
     }
     _push_host_sample(host_id, sample)
     return result

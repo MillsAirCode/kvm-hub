@@ -84,6 +84,7 @@ type Sample = {
   vram_total_mib: number | null;
   gpu_power_w: number | null;
   gpu_clock_mhz: number | null;
+  water_temp_c: number | null;
 };
 
 function Sparkline({
@@ -483,8 +484,8 @@ function HostCard({ stats, history }: { stats: HostStats; history: Sample[] }) {
           value={`${gpu.water_temp_c}°C`}
           spark={
             <Sparkline
-              values={[gpu.water_temp_c]}
-              color={gpu.water_temp_c > 40 ? "#f59e0b" : "#22d3ee"}
+              values={history.map((s) => s.water_temp_c)}
+              color={gpu.water_temp_c > 32 ? "#f59e0b" : "#22d3ee"}
               yMin={15}
               yMax={50}
             />
