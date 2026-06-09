@@ -113,6 +113,21 @@ export default function FleetView({
     try { localStorage.setItem(SUB_STORAGE_KEY, sub); } catch { /* noop */ }
   }, [sub]);
 
+  // Load the fleet from the API (machines.ts MACHINES is just the pre-load
+  // fallback — empty in the open-source tree, populated via machines.yaml).
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/machines")
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((list: Machine[]) => {
+        if (!cancelled && Array.isArray(list) && list.length) {
+          setMachines(list.map((m) => ({ ...m, status: "unknown" as const })));
+        }
+      })
+      .catch(() => { /* keep static fallback */ });
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     const poll = async () => {
