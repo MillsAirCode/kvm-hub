@@ -600,8 +600,11 @@ export default function MemoryView() {
 
       {/* Sessions table */}
       <div className="card p-5 min-w-0">
-        <div className="text-sm font-semibold tracking-tight mb-3">Sessions</div>
-        <div className="space-y-1 text-xs">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-sm font-semibold tracking-tight">Sessions</div>
+          <div className="text-[10px] text-zinc-500">{data.sessions.length} recent</div>
+        </div>
+        <div className="space-y-1 text-xs max-h-[260px] overflow-y-auto pr-1">
           {data.sessions.map((s) => (
             <div key={s.id} className="flex items-center gap-3 py-1 border-b border-ink-700/50 last:border-0 min-w-0">
               <span
