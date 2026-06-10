@@ -610,7 +610,7 @@ function AgentCard({
         </div>
       )}
 
-      {metrics && <Vitals metrics={metrics} />}
+      {metrics && <Vitals metrics={metrics} model={agent.model} />}
 
       {/* Model inspector — shows llama-server runtime config */}
       <ModelInspector agentId={agent.id} />
@@ -618,7 +618,7 @@ function AgentCard({
   );
 }
 
-function Vitals({ metrics }: { metrics: AgentMetricsResponse }) {
+function Vitals({ metrics, model }: { metrics: AgentMetricsResponse; model?: string }) {
   const buckets = metrics.activity_buckets;
   const max = Math.max(1, ...buckets);
   const cellW = `${100 / 60}%`;
@@ -640,7 +640,15 @@ function Vitals({ metrics }: { metrics: AgentMetricsResponse }) {
         <span>
           tools <span className="text-zinc-200 font-mono ml-0.5">{metrics.tools_today}</span>
         </span>
-        <span className="ml-auto opacity-60 text-[9px]">last 60 min</span>
+        {model && (
+          <span
+            className="ml-auto max-w-[40%] truncate rounded border border-ink-700 bg-ink-900/70 px-1.5 py-0.5 font-mono text-[9px] text-accent-glow/80 normal-case"
+            title={`model: ${model}`}
+          >
+            {model}
+          </span>
+        )}
+        <span className={`${model ? "" : "ml-auto "}opacity-60 text-[9px]`}>last 60 min</span>
       </div>
       <div className="flex h-5 gap-px">
         {buckets.map((c, i) => {

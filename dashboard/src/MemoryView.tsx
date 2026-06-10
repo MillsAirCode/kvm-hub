@@ -31,6 +31,7 @@ type Overview = {
   sessions: Session[];
   recent_messages: Message[];
   queue_status: Record<string, unknown>;
+  embed_health?: { ok: boolean; error?: string };
   errors: Record<string, string>;
 };
 
@@ -127,6 +128,56 @@ export default function MemoryView() {
   const [conclusionsTotal, setConclusionsTotal] = useState(0);
   const [conclusionsScope, setConclusionsScope] = useState<"me" | "all">("me");
   const [conclusionsError, setConclusionsError] = useState<string | null>(null);
+
+  // Memory chat (Honcho dialectic) state
+  const [chatPeer, setChatPeer] = useState<string>("");
+  const [chatQuery, setChatQuery] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatLog, setChatLog] = useState<{ q: string; a?: string; err?: string; peer: string }[]>([]);
+
+  const askMemory = async () => {
+    const q = chatQuery.trim();
+    const peer = chatPeer || data?.peers.find((p) => isHumanPeer(p.id))?.id || "";
+    if (!q || !peer || chatBusy) return;
+    setChatBusy(true);
+    setChatQuery("");
+    setChatLog((log) => [...log, { q, peer }]);
+    try {
+      const r = await fetch("/api/memory/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ peer_id: peer, query: q, reasoning_level: "minimal" }),
+      });
+      const d = await r.json();
+      setChatLog((log) =>
+        log.map((e, i) =>
+          i === log.length - 1 ? { ...e, a: d.content, err: d.error } : e,
+        ),
+      );
+    } catch (e) {
+      setChatLog((log) =>
+        log.map((en, i) => (i === log.length - 1 ? { ...en, err: (e as Error).message } : en)),
+      );
+    } finally {
+      setChatBusy(false);
+    }
+  };
+
+  const deleteConclusion = async (id: string) => {
+    if (!confirm("Delete this conclusion from Honcho? This cannot be undone.")) return;
+    const prev = conclusions;
+    setConclusions((cs) => cs.filter((c) => c.id !== id));
+    setConclusionsTotal((t) => Math.max(0, t - 1));
+    try {
+      const r = await fetch(`/api/memory/conclusions/${encodeURIComponent(id)}`, { method: "DELETE" });
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || "delete failed");
+    } catch (e) {
+      setConclusions(prev);
+      setConclusionsTotal((t) => t + 1);
+      setConclusionsError(`delete failed: ${(e as Error).message}`);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -243,6 +294,89 @@ export default function MemoryView() {
         <StatCard label="Peers" value={String(data.peers.length)} />
         <StatCard label="Sessions" value={String(data.sessions.length)} />
         <StatCard label="Recent messages" value={String(data.recent_messages.length)} />
+      </div>
+
+      {/* Honcho health strip — deriver queue, freshness, embedder */}
+      <HealthStrip
+        queue={data.queue_status}
+        embed={data.embed_health}
+        lastConclusionAt={conclusions[0]?.created_at}
+      />
+
+      {/* Memory chat — ask the fleet's memory (Honcho dialectic) */}
+      <div className="card p-4 sm:p-5 min-w-0">
+        <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+          <div>
+            <div className="text-sm font-semibold tracking-tight">Ask memory</div>
+            <div className="text-[10px] text-zinc-500">
+              Honcho dialectic — agentic search over everything known about a peer (runs on the local fleet model; slow but thorough)
+            </div>
+          </div>
+          <div className="flex items-center gap-1 flex-wrap">
+            {data.peers.map((p) => {
+              const active = (chatPeer || data.peers.find((x) => isHumanPeer(x.id))?.id) === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setChatPeer(p.id)}
+                  className={`text-[10px] px-2 py-1 rounded border transition font-mono ${
+                    active
+                      ? "bg-accent/15 border-accent/40 text-accent-glow phosphor"
+                      : "border-ink-700 text-zinc-400 hover:text-zinc-100"
+                  }`}
+                  title={`ask about ${peerLabel(p.id)}`}
+                >
+                  {peerLabel(p.id)}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {chatLog.length > 0 && (
+          <div className="mb-3 space-y-3 max-h-[360px] overflow-y-auto pr-1">
+            {chatLog.map((e, i) => (
+              <div key={i} className="min-w-0">
+                <div className="text-xs text-sky-300/90 font-medium">
+                  <span className="text-zinc-600 font-mono text-[10px] mr-1.5">about {peerLabel(e.peer)} ›</span>
+                  {e.q}
+                </div>
+                {e.a != null && (
+                  <div className="mt-1 text-xs text-zinc-300 whitespace-pre-wrap [overflow-wrap:anywhere] border-l-2 border-accent/30 pl-2">
+                    {e.a}
+                  </div>
+                )}
+                {e.err && <div className="mt-1 text-xs text-rose-300">error: {e.err}</div>}
+                {e.a == null && !e.err && (
+                  <div className="mt-1 text-[10px] text-zinc-500 italic animate-pulse">
+                    thinking — dialectic search + reasoning on the fleet model…
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={chatQuery}
+            onChange={(e) => setChatQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") askMemory(); }}
+            placeholder={'ask the fleet\'s memory — e.g. "what hardware projects are in flight?"'}
+            className="flex-1 rounded-lg border border-ink-700 bg-ink-900/60 px-3 py-2
+                       text-sm text-zinc-100 placeholder:text-zinc-600
+                       focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/30"
+            style={{ fontSize: "16px" }}
+            disabled={chatBusy}
+          />
+          <button
+            onClick={askMemory}
+            disabled={chatBusy || !chatQuery.trim()}
+            className="text-xs px-3 py-2 rounded-lg border border-accent/40 bg-accent/15 text-accent-glow
+                       hover:bg-accent/25 disabled:opacity-40 disabled:cursor-not-allowed phosphor"
+          >
+            {chatBusy ? "…" : "ask"}
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -378,9 +512,7 @@ export default function MemoryView() {
                     </span>
                     <span className="ml-auto shrink-0">{relTime(m.created_at)}</span>
                   </div>
-                  <div className="mt-1 text-zinc-300 whitespace-pre-wrap [overflow-wrap:anywhere]">
-                    {m.content}
-                  </div>
+                  <MessageContent text={m.content} />
                 </div>
               ))
             )}
@@ -449,6 +581,13 @@ export default function MemoryView() {
                     </span>
                   )}
                   <span className="ml-auto shrink-0 font-mono">{relTime(c.created_at)}</span>
+                  <button
+                    onClick={() => deleteConclusion(c.id)}
+                    className="shrink-0 text-zinc-600 hover:text-rose-300 transition px-1 -mr-1"
+                    title="delete this conclusion (memory curation — cannot be undone)"
+                  >
+                    ✕
+                  </button>
                 </div>
                 <div className="text-xs text-zinc-300 whitespace-pre-wrap [overflow-wrap:anywhere]">
                   {c.content}
@@ -496,6 +635,104 @@ function StatCard({ label, value }: { label: string; value: string }) {
     <div className="card p-4">
       <div className="text-[10px] uppercase tracking-wide text-zinc-500">{label}</div>
       <div className="mt-1 text-xl font-semibold tracking-tight truncate">{value}</div>
+    </div>
+  );
+}
+
+/** Render a Honcho message: tool/run internals become compact chips, long
+ *  remainder collapses behind a toggle. Keeps the feed scannable. */
+function MessageContent({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  // Hermes internals look like "[Tool ...]", "[Run ...]", "[Tool/Run: ...]"
+  const parts = text.split(/(\[(?:Tool|Run)[^\]]{0,160}\])/g).filter(Boolean);
+  const hasChips = parts.length > 1 || /^\[(?:Tool|Run)/.test(text);
+  const plain = parts.filter((p) => !/^\[(?:Tool|Run)/.test(p)).join(" ").trim();
+  const isLong = plain.length > 280;
+
+  if (!hasChips && !isLong) {
+    return (
+      <div className="mt-1 text-zinc-300 whitespace-pre-wrap [overflow-wrap:anywhere]">{text}</div>
+    );
+  }
+  return (
+    <div className="mt-1 min-w-0">
+      <div className="flex flex-wrap gap-1 items-center">
+        {parts.map((p, i) =>
+          /^\[(?:Tool|Run)/.test(p) ? (
+            <span
+              key={i}
+              className="inline-block max-w-full truncate rounded border border-ink-700 bg-ink-900/70
+                         px-1.5 py-0.5 text-[9px] font-mono text-zinc-500"
+              title={p}
+            >
+              {p.length > 64 ? p.slice(0, 61) + "…]" : p}
+            </span>
+          ) : null,
+        )}
+      </div>
+      {plain && (
+        <div className="mt-1 text-zinc-300 whitespace-pre-wrap [overflow-wrap:anywhere]">
+          {expanded || !isLong ? plain : plain.slice(0, 280) + "…"}
+          {isLong && (
+            <button
+              onClick={() => setExpanded((v) => !v)}
+              className="ml-1.5 text-[10px] text-accent-glow/70 hover:text-accent-glow"
+            >
+              {expanded ? "less" : "more"}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Deriver queue + embedder + freshness at a glance. The deriver fails
+ *  silently otherwise — this is the early-warning strip. */
+function HealthStrip({
+  queue,
+  embed,
+  lastConclusionAt,
+}: {
+  queue: Record<string, unknown>;
+  embed?: { ok: boolean; error?: string };
+  lastConclusionAt?: string;
+}) {
+  const num = (k: string) => (typeof queue[k] === "number" ? (queue[k] as number) : 0);
+  const total = num("total_work_units");
+  const done = num("completed_work_units");
+  const inProg = num("in_progress_work_units");
+  const pending = Math.max(0, total - done - inProg);
+  const backlog = pending + inProg;
+  const queueTone =
+    backlog === 0
+      ? "text-emerald-300 border-emerald-500/30 bg-emerald-500/10"
+      : backlog < 20
+        ? "text-amber-300 border-amber-500/30 bg-amber-500/10"
+        : "text-rose-300 border-rose-500/30 bg-rose-500/10";
+  const embedOk = embed?.ok === true;
+  const conclAge = lastConclusionAt ? relTime(lastConclusionAt) : "—";
+  return (
+    <div className="grid grid-cols-3 gap-3">
+      <div className={`card p-3 border ${queueTone}`}>
+        <div className="text-[10px] uppercase tracking-wide opacity-70">Deriver queue</div>
+        <div className="mt-0.5 text-sm font-semibold font-mono">
+          {backlog === 0 ? "idle" : `${backlog} queued`}
+          <span className="ml-2 text-[10px] opacity-60 font-normal">
+            {inProg > 0 ? `${inProg} running · ` : ""}{done} done
+          </span>
+        </div>
+      </div>
+      <div className="card p-3">
+        <div className="text-[10px] uppercase tracking-wide text-zinc-500">Last conclusion</div>
+        <div className="mt-0.5 text-sm font-semibold font-mono text-zinc-200">{conclAge}</div>
+      </div>
+      <div className={`card p-3 border ${embedOk ? "border-emerald-500/30" : "border-rose-500/40 bg-rose-500/10"}`}>
+        <div className="text-[10px] uppercase tracking-wide text-zinc-500">Embedder</div>
+        <div className={`mt-0.5 text-sm font-semibold font-mono ${embedOk ? "text-emerald-300" : "text-rose-300"}`}>
+          {embedOk ? "● online" : "● down"}
+        </div>
+      </div>
     </div>
   );
 }

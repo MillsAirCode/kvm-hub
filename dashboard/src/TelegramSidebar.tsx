@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * Persistent right-side Telegram Web pane, desktop-only. Toggle to
@@ -31,6 +31,23 @@ export default function TelegramSidebar() {
   const [state, setState] = useState<State>(() => readState());
   const [reload, setReload] = useState(0);
   const [resizing, setResizing] = useState(false);
+  // tweb defaults to day theme (it follows prefers-color-scheme) which is a
+  // white slab against our dark HUD. The iframe is same-origin, so poll its
+  // documentElement for the "night" class and invert while it's in day mode.
+  // Self-correcting: switching tweb to night drops the filter.
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const [invertDay, setInvertDay] = useState(false);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      try {
+        const doc = iframeRef.current?.contentDocument;
+        if (!doc?.documentElement) return;
+        setInvertDay(!doc.documentElement.classList.contains("night"));
+      } catch { /* cross-origin or not ready — leave as-is */ }
+    }, 2000);
+    return () => clearInterval(id);
+  }, [reload]);
 
   useEffect(() => {
     try {
@@ -129,10 +146,15 @@ export default function TelegramSidebar() {
       {/* Iframe — pointer events suppressed during drag so resize works */}
       <iframe
         key={reload}
+        ref={iframeRef}
         src="/tg/"
         title="Telegram Web"
         className="flex-1 w-full"
-        style={{ border: 0, pointerEvents: resizing ? "none" : "auto" }}
+        style={{
+          border: 0,
+          pointerEvents: resizing ? "none" : "auto",
+          filter: invertDay ? "invert(0.92) hue-rotate(180deg)" : "none",
+        }}
         sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals allow-downloads"
         allow="clipboard-read; clipboard-write; camera; microphone"
       />

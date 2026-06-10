@@ -2663,10 +2663,21 @@ async def memory_overview() -> dict:
                 return {"_error": f"{type(e).__name__}: {e}"}
 
         ws = HONCHO_WORKSPACE
-        peers, sessions, queue = await asyncio.gather(
+        async def embed_probe() -> dict:
+            # Local llama.cpp embedding server (Honcho's embedder) — bound to
+            # the docker-network gateway, reachable from this host only.
+            embed_base = os.environ.get("HONCHO_EMBED_BASE", "http://172.19.0.1:8088")
+            try:
+                r = await client.get(f"{embed_base}/health")
+                return {"ok": r.status_code == 200}
+            except Exception as e:
+                return {"ok": False, "error": f"{type(e).__name__}"}
+
+        peers, sessions, queue, embed = await asyncio.gather(
             post(f"/v3/workspaces/{ws}/peers/list", {}),
             post(f"/v3/workspaces/{ws}/sessions/list", {"limit": 20}),
             get_(f"/v3/workspaces/{ws}/queue/status"),
+            embed_probe(),
         )
 
         # For each session, get the last few messages
@@ -2713,12 +2724,58 @@ async def memory_overview() -> dict:
             "sessions": sessions.get("items", []) if "_error" not in sessions else [],
             "recent_messages": recent_messages,
             "queue_status": queue if "_error" not in queue else {},
+            "embed_health": embed,
             "errors": {
                 k: v.get("_error")
                 for k, v in [("peers", peers), ("sessions", sessions), ("queue", queue)]
                 if "_error" in v
             },
         }
+
+
+@app.post("/api/memory/chat")
+async def memory_chat(body: dict) -> dict:
+    """Ask Honcho's dialectic endpoint a question about a peer.
+
+    Body: {peer_id, query, reasoning_level?}. Non-streaming — dialectic does
+    agentic search + reasoning on the fleet's local model, so allow minutes.
+    """
+    import httpx
+    peer_id = (body.get("peer_id") or "").strip()
+    query = (body.get("query") or "").strip()
+    level = body.get("reasoning_level") or "low"
+    if not peer_id or not query:
+        raise HTTPException(400, "peer_id and query required")
+    try:
+        async with httpx.AsyncClient(timeout=240.0) as client:
+            r = await client.post(
+                f"{HONCHO_BASE}/v3/workspaces/{HONCHO_WORKSPACE}/peers/{peer_id}/chat",
+                json={"query": query, "stream": False, "reasoning_level": level},
+            )
+            if r.status_code >= 400:
+                return {"error": f"HTTP {r.status_code}: {r.text[:300]}"}
+            data = r.json()
+        # DialecticResponse: {"content": "..."} (tolerate shape drift)
+        content = data.get("content") if isinstance(data, dict) else None
+        return {"content": content or str(data)[:4000]}
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {e}"}
+
+
+@app.delete("/api/memory/conclusions/{conclusion_id}")
+async def memory_delete_conclusion(conclusion_id: str) -> dict:
+    """Delete a Honcho conclusion (memory curation — cannot be undone)."""
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.delete(
+                f"{HONCHO_BASE}/v3/workspaces/{HONCHO_WORKSPACE}/conclusions/{conclusion_id}",
+            )
+        if r.status_code in (200, 204):
+            return {"ok": True}
+        return {"ok": False, "error": f"HTTP {r.status_code}: {r.text[:200]}"}
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
 
 # ── Service health & restart ────────────────────────────────────────────

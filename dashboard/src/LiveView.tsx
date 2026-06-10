@@ -4,6 +4,7 @@ import ActivityFeed from "./ActivityFeed";
 import Broadcast from "./Broadcast";
 import AgentStatusRail from "./AgentStatusRail";
 import ActivityHeatmap from "./ActivityHeatmap";
+import LearnedDigest from "./LearnedDigest";
 
 /**
  * "What's happening right now."
@@ -39,6 +40,9 @@ export default function LiveView() {
           </div>
         </div>
       </div>
+
+      {/* Memory digest — recent Honcho conclusions, grouped by day */}
+      <LearnedDigest />
 
       {/* History (collapsed by default) */}
       <div className="card p-3">
