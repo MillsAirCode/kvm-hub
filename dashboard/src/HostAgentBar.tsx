@@ -28,20 +28,20 @@ interface HostAgentMapping {
 }
 
 const HOST_AGENT: Record<string, HostAgentMapping> = {
-  bradbigdesktop: {
-    agentLabel: "CLUE",
+  "gpu-workstation": {
+    agentLabel: "ATLAS",
     agentModel: "qwen3.6-27b",
     color: "#a78bfa",
     glow: "#c4b5fd",
   },
-  junior: {
-    agentLabel: "SARAH",
+  "inference-node": {
+    agentLabel: "NOVA",
     agentModel: "qwen3.6-35b-a3b",
     color: "#fb7185",
     glow: "#fda4af",
   },
-  natalie: {
-    agentLabel: "CLAUDE",
+  "media-server": {
+    agentLabel: "CODEX",
     agentModel: "claude-opus-4-7",
     color: "#34d399",
     glow: "#6ee7b7",
