@@ -290,8 +290,14 @@ export default function WorkflowGraph() {
   const [sshFlows, setSshFlows] = useState<SshFlow[]>([]);
   const [taskCounts, setTaskCounts] = useState<Record<string, number>>({});
   const [activities, setActivities] = useState<Record<string, AgentActivity>>({});
+  // Per-agent timer that resets externally-pushed activity back to idle so a
+  // single workflow event doesn't pin an agent to "thinking" forever.
   const activityDecayRef = useRef<Map<string, number>>(new Map());
   const ACTIVITY_DECAY_MS = 6000;
+  // useCallback so the reference is stable across renders — the onWorkflow
+  // effect captures it in a `[]`-deps closure and we don't want it stale.
+  // setActivities + activityDecayRef are both stable refs from React, so
+  // empty deps are safe here.
   const bumpActivity = useCallback((agentId: string, act: AgentActivity) => {
     setActivities((m) => (m[agentId] === act ? m : { ...m, [agentId]: act }));
     const timers = activityDecayRef.current;
@@ -314,15 +320,19 @@ export default function WorkflowGraph() {
   const [now, setNow] = useState(() => performance.now());
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 720, h: 380 });
+
+  // Replay scrubber state
   const [replayMode, setReplayMode] = useState(false);
   const [history, setHistory] = useState<HistoryEvent[]>([]);
-  const [replayPos, setReplayPos] = useState(1);
+  const [replayPos, setReplayPos] = useState(1); // 0..1 along the timeline
   const [playing, setPlaying] = useState(false);
   const [playSpeed, setPlaySpeed] = useState(2);
   const lastDispatchedTsRef = useRef<number | null>(null);
+
   useEffect(() => {
     fetchAgents().then(setAgents).catch(() => {});
   }, []);
+
   useEffect(() => {
     if (!containerRef.current) return;
     const ro = new ResizeObserver((entries) => {
@@ -334,6 +344,8 @@ export default function WorkflowGraph() {
     ro.observe(containerRef.current);
     return () => ro.disconnect();
   }, []);
+
+  // animation clock
   useEffect(() => {
     let raf = 0;
     const tick = () => {
@@ -343,6 +355,8 @@ export default function WorkflowGraph() {
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
+
+  // GC
   useEffect(() => {
     const id = setInterval(() => {
       const cutoff = performance.now();
@@ -352,6 +366,10 @@ export default function WorkflowGraph() {
     }, 700);
     return () => clearInterval(id);
   }, []);
+
+  // Backend SSE: any /send or /stream call emits user_to_agent / agent_to_user
+  // here, regardless of whether the source is the dashboard or external curl.
+  // Disabled while in replay mode so live events don't pollute the playback.
   useEffect(() => {
     if (replayMode) return;
     const proto = window.location.protocol;
@@ -409,6 +427,8 @@ export default function WorkflowGraph() {
       es?.close();
     };
   }, [replayMode]);
+
+  // Load history when entering replay mode
   useEffect(() => {
     if (!replayMode) {
       setHistory([]);
@@ -421,12 +441,19 @@ export default function WorkflowGraph() {
       .then((d) => setHistory(Array.isArray(d) ? d : []))
       .catch(() => setHistory([]));
   }, [replayMode]);
+
+  // Replay clock — advances playback time when "playing", dispatching events
+  // whose ts crossed into the playback window since the last tick.
   useEffect(() => {
     if (!replayMode || history.length === 0) return;
     const tStart = history[0]._ts;
     const tEnd = history[history.length - 1]._ts;
     const span = Math.max(1, tEnd - tStart);
+
+    // Compute current playback ts from replayPos
     const playbackTs = tStart + replayPos * span;
+
+    // Dispatch any events between lastDispatched and playbackTs
     const lastTs = lastDispatchedTsRef.current ?? playbackTs - 0.001;
     if (playbackTs >= lastTs) {
       for (const e of history) {
@@ -453,6 +480,8 @@ export default function WorkflowGraph() {
     }
     lastDispatchedTsRef.current = playbackTs;
   }, [replayMode, history, replayPos]);
+
+  // Auto-advance the slider while playing
   useEffect(() => {
     if (!replayMode || !playing || history.length === 0) return;
     const tStart = history[0]._ts;
@@ -470,6 +499,8 @@ export default function WorkflowGraph() {
     }, 100);
     return () => clearInterval(id);
   }, [replayMode, playing, playSpeed, history]);
+
+  // External event bus (Broadcast composer → workflow)
   useEffect(() => {
     const off = onWorkflow((e: WorkflowEvent) => {
       const ts = performance.now();
@@ -537,6 +568,8 @@ export default function WorkflowGraph() {
     });
     return off;
   }, []);
+
+  // Tasks: just track per-agent in_progress counts (drives badge)
   useEffect(() => {
     let stopped = false;
     const tick = async () => {
@@ -563,6 +596,8 @@ export default function WorkflowGraph() {
       clearInterval(id);
     };
   }, []);
+
+  // Layout: agents in a horizontal row at top, You bottom-center
   const userPos = { x: size.w / 2, y: size.h - 64 };
   const agentPositions = useMemo(() => {
     if (agents.length === 0) return [] as { x: number; y: number }[];
@@ -573,14 +608,18 @@ export default function WorkflowGraph() {
     const offsetX = agents.length === 1 ? size.w / 2 : margin;
     return agents.map((_, i) => ({ x: offsetX + step * i, y: cy }));
   }, [agents, size.w]);
+
   const arcs = useMemo<Arc[]>(() => {
     return agentPositions.map((p) => {
+      // Curve mid-point, biased toward each side so arcs don't all overlap
       const dx = p.x - userPos.x;
       const midX = userPos.x + dx * 0.55;
       const midY = (userPos.y + p.y) / 2 - Math.abs(dx) * 0.15 - 30;
       return { from: userPos, to: p, mid: { x: midX, y: midY } };
     });
   }, [agentPositions, userPos.x, userPos.y]);
+
+  // Inter-agent arcs (agent ↔ agent). Bowed UP, above the agent row.
   const peerArcs = useMemo(() => {
     const out: { fromIdx: number; toIdx: number; arc: Arc }[] = [];
     for (let i = 0; i < agentPositions.length; i++) {
@@ -588,6 +627,7 @@ export default function WorkflowGraph() {
         const a = agentPositions[i];
         const b = agentPositions[j];
         const midX = (a.x + b.x) / 2;
+        // Bow upward: stronger when agents are far apart
         const sep = Math.abs(b.x - a.x);
         const midY = a.y - 32 - sep * 0.18;
         out.push({ fromIdx: i, toIdx: j, arc: { from: a, to: b, mid: { x: midX, y: midY } } });
@@ -595,6 +635,7 @@ export default function WorkflowGraph() {
     }
     return out;
   }, [agentPositions]);
+
   const peerArcByPair = useMemo(() => {
     const m = new Map<string, { arc: Arc; reverse: boolean }>();
     for (const pa of peerArcs) {
@@ -606,13 +647,18 @@ export default function WorkflowGraph() {
     }
     return m;
   }, [peerArcs, agents]);
+
+  // Memoized so we don't allocate new arrays via Object.values + filter on
+  // every animation-frame `now` update — only recompute when activities change.
   const overallActivity = useMemo(
     () => Object.values(activities).filter((a) => a !== "idle").length,
     [activities],
   );
   const auroraIntensity = Math.min(1, overallActivity / Math.max(1, agents.length));
+
   return (
     <div ref={containerRef} className="card p-4 w-full overflow-hidden relative">
+      {/* aurora background */}
       <div
         className="absolute inset-0 pointer-events-none transition-opacity duration-700"
         style={{
@@ -623,6 +669,7 @@ export default function WorkflowGraph() {
           opacity: 0.45 + auroraIntensity * 0.55,
         }}
       />
+
       <div className="relative flex items-center justify-between mb-3 gap-2">
         <div className="text-sm font-semibold tracking-tight">Workflow</div>
         <div className="flex items-center gap-2">
@@ -648,6 +695,7 @@ export default function WorkflowGraph() {
           </button>
         </div>
       </div>
+
       <svg width={size.w} height={size.h} className="block max-w-full relative">
         <defs>
           <linearGradient id="arc-grad" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -659,6 +707,8 @@ export default function WorkflowGraph() {
             <stop offset="100%" stopColor="#7c5cff" stopOpacity="0" />
           </radialGradient>
         </defs>
+
+        {/* Inter-agent arcs (mesh, bowed upward) */}
         {peerArcs.map((pa, k) => {
           const fromId = agents[pa.fromIdx]?.id ?? "";
           const toId = agents[pa.toIdx]?.id ?? "";
@@ -681,6 +731,8 @@ export default function WorkflowGraph() {
             />
           );
         })}
+
+        {/* Ambient drift along inter-agent arcs */}
         {peerArcs.flatMap((pa, ai) => {
           const els: any[] = [];
           const cycle = 9000;
@@ -703,6 +755,8 @@ export default function WorkflowGraph() {
           }
           return els;
         })}
+
+        {/* Connection arcs (one per agent) */}
         {arcs.map((arc, i) => {
           const a = agents[i];
           const act = activities[a?.id ?? ""] ?? "idle";
@@ -725,6 +779,8 @@ export default function WorkflowGraph() {
             </g>
           );
         })}
+
+        {/* Ambient drift along each arc (always-on slow shimmer) */}
         {arcs.flatMap((arc, ai) => {
           const els: any[] = [];
           const cycle = 7000;
@@ -747,6 +803,8 @@ export default function WorkflowGraph() {
           }
           return els;
         })}
+
+        {/* Active streams along arcs */}
         {streams.flatMap((s) => {
           let arc: Arc | undefined;
           let reverse = false;
@@ -794,6 +852,8 @@ export default function WorkflowGraph() {
           }
           return els;
         })}
+
+        {/* SSH flows: terminal-green particles travel along the peer arc */}
         {sshFlows.flatMap((s) => {
           const found = peerArcByPair.get(`${s.fromId}|${s.toId}`);
           if (!found) return [];
@@ -828,6 +888,7 @@ export default function WorkflowGraph() {
               />
             );
           }
+          // SSH badge near the arc midpoint
           const elapsed = (now - s.startTs) / 1700;
           if (elapsed < 0.6) {
             const labelOp = elapsed < 0.18 ? elapsed / 0.18 : 1 - Math.max(0, (elapsed - 0.4) / 0.2);
@@ -850,6 +911,9 @@ export default function WorkflowGraph() {
           }
           return els;
         })}
+
+        {/* Tool-call burst: shockwave ring + radiating ASCII glyphs +
+            tool-tinted orbit. Color is keyed off tool category. */}
         {bursts.flatMap((b) => {
           const idx = agents.findIndex((a) => a.id === b.agentId);
           if (idx < 0) return [];
@@ -859,6 +923,8 @@ export default function WorkflowGraph() {
           if (elapsed >= 1) return [];
           const color = toolColor(b.name);
           const els: any[] = [];
+
+          // Shockwave: expanding stroked rings, fade fast
           const shockE = Math.min(1, elapsed * 2.2);
           const shockR = 26 + shockE * 38;
           const shockOp = (1 - shockE) * 0.55;
@@ -875,6 +941,7 @@ export default function WorkflowGraph() {
                 opacity={shockOp}
               />,
             );
+            // Inner shockwave for double-ring effect
             els.push(
               <circle
                 key={`${b.id}-shock2`}
@@ -888,6 +955,9 @@ export default function WorkflowGraph() {
               />,
             );
           }
+
+          // Radiating ASCII glyphs: shoot outward from agent
+          // (BURST_GLYPHS hoisted to module scope, see top of file)
           const RADIATE_N = 8;
           const seedBase = parseInt(b.id.slice(-6) || "0", 36);
           for (let i = 0; i < RADIATE_N; i++) {
@@ -914,6 +984,8 @@ export default function WorkflowGraph() {
               </text>,
             );
           }
+
+          // Tool-tinted orbit (fast inner ring)
           const N = 12;
           const orbitR = 22 + elapsed * 14;
           for (let i = 0; i < N; i++) {
@@ -921,6 +993,8 @@ export default function WorkflowGraph() {
             const x = pos.x + Math.cos(angle) * orbitR;
             const y = pos.y + Math.sin(angle) * orbitR;
             const opacity = (1 - elapsed) * 0.8;
+            // Use a halo (larger faded circle behind a brighter dot) instead
+            // of a drop-shadow filter — same look, much cheaper on iGPU.
             els.push(
               <circle
                 key={`${b.id}-halo-${i}`}
@@ -940,6 +1014,8 @@ export default function WorkflowGraph() {
               />,
             );
           }
+
+          // Tool name badge — terminal-style with `> ` prefix
           const labelOp = elapsed < 0.18 ? elapsed / 0.18 : 1 - Math.max(0, (elapsed - 0.55) / 0.45);
           els.push(
             <text
@@ -975,7 +1051,11 @@ export default function WorkflowGraph() {
           );
           return els;
         })}
+
+        {/* You node */}
         <UserNode cx={userPos.x} cy={userPos.y} now={now} />
+
+        {/* Agent nodes */}
         {agents.map((a, i) => {
           const pos = agentPositions[i];
           if (!pos) return null;
@@ -1034,6 +1114,9 @@ export default function WorkflowGraph() {
                 );
               }}
               onSshTarget={(host) => {
+                // Map the SSH destination (host or IP) to a known agent.
+                // Match if any agent's host string contains the target or
+                // vice-versa (handles 10.0.0.x ↔ Tailscale IPs ↔ hostnames).
                 const target = agents.find(
                   (x) =>
                     x.id !== a.id &&
@@ -1061,6 +1144,7 @@ export default function WorkflowGraph() {
           );
         })}
       </svg>
+
       {replayMode && (
         <div className="relative mt-3 px-1">
           {(() => {
@@ -1131,6 +1215,7 @@ export default function WorkflowGraph() {
           })()}
         </div>
       )}
+
       <div className="relative mt-2 flex items-center gap-4 text-[10px] text-zinc-500 flex-wrap">
         <span className="flex items-center gap-1.5">
           <span className="h-1.5 w-1.5 rounded-full bg-sky-400" /> you → agent
@@ -1161,7 +1246,9 @@ function UserNode({ cx, cy, now }: { cx: number; cy: number; now: number }) {
   const glow = 10 + breath * 2;
   return (
     <g style={{ pointerEvents: "none" }}>
+      {/* Outer halo */}
       <circle cx={cx} cy={cy} r={radius + 14} fill="url(#user-glow)" opacity={0.7} />
+      {/* Main disc */}
       <circle
         cx={cx}
         cy={cy}
@@ -1171,6 +1258,7 @@ function UserNode({ cx, cy, now }: { cx: number; cy: number; now: number }) {
         strokeWidth="2.5"
         style={{ filter: `drop-shadow(0 0 ${glow}px #7c5cff)` }}
       />
+      {/* Person glyph */}
       <g transform={`translate(${cx}, ${cy})`}>
         <circle cx="0" cy="-6" r="6" fill="#a78bfa" />
         <path d="M -10 10 Q 0 -2 10 10 L 10 12 L -10 12 Z" fill="#a78bfa" />
@@ -1201,6 +1289,8 @@ function UserNode({ cx, cy, now }: { cx: number; cy: number; now: number }) {
   );
 }
 
+/** Agent-specific bright/glow color for the neural-net canvas inside the orb.
+ *  Falls back to the activity color when busy so the orb visually shifts state. */
 const AGENT_NET_GLOW: Record<string, string> = {
   clue: "#c4b5fd",
   sarah: "#fda4af",
@@ -1221,6 +1311,7 @@ function AgentNode({
   activity: AgentActivity;
   breathPhase: number;
 }) {
+  // Tint = idle resting color, activity color takes over when busy.
   const tint = agentTint(agent.id);
   const color = activity === "idle" ? tint : ACTIVITY_COLOR[activity];
   const glowTint = AGENT_NET_GLOW[agent.id] ?? "#a7f3d0";
@@ -1229,9 +1320,12 @@ function AgentNode({
   const glow = (activity === "idle" ? 6 : 16) + 2 * Math.sin(breathPhase);
   const netActive = activity !== "idle";
   const fo = radius * 2;
+
   return (
     <g style={{ transition: "all 200ms ease" }}>
+      {/* Filled background disc behind the canvas — keeps the orb opaque. */}
       <circle cx={cx} cy={cy} r={radius} fill="#0a0a0d" />
+      {/* Neural-net canvas clipped to a circle via foreignObject + border-radius. */}
       <foreignObject x={cx - radius} y={cy - radius} width={fo} height={fo}>
         <div
           style={{
@@ -1245,6 +1339,7 @@ function AgentNode({
           <NeuralNetMini color={tint} glowColor={glowTint} active={netActive} />
         </div>
       </foreignObject>
+      {/* Stroked border ring on top — color shifts with activity. */}
       <circle
         cx={cx}
         cy={cy}
@@ -1254,6 +1349,7 @@ function AgentNode({
         strokeWidth="2"
         style={{ filter: `drop-shadow(0 0 ${glow}px ${color})` }}
       />
+      {/* Agent name BELOW the orb (was inside, but the canvas takes the interior). */}
       <text
         x={cx}
         y={cy + radius + 14}
@@ -1266,6 +1362,7 @@ function AgentNode({
       >
         {agent.name.length > 11 ? agent.name.slice(0, 11) : agent.name}
       </text>
+      {/* Activity word ABOVE the orb. */}
       <text
         x={cx}
         y={cy - radius - 16}
@@ -1328,7 +1425,9 @@ function AgentSlot({
     onTool,
     onSshTarget,
   );
+
   const breathPhase = (now / 1000) * 1.2 + index * 0.7;
+
   const lastActRef = useRef<AgentActivity>("idle");
   useEffect(() => {
     if (activity !== lastActRef.current) {
@@ -1336,8 +1435,11 @@ function AgentSlot({
       onActivity(activity);
     }
   }, [activity, onActivity]);
+
+  // Use the more-recent of WS-derived activity vs externally-pushed activity
   const displayActivity =
     activity !== "idle" ? activity : currentActivity;
+
   return (
     <>
       <AgentNode
@@ -1374,6 +1476,9 @@ function AgentSlot({
   );
 }
 
+// Replay scrubber: accent-themed range input with a hover tooltip that shows
+// the playback time at the cursor's position. Native <input type=range> already
+// supports click-to-seek; we layer the tooltip + custom styling on top.
 function ReplayScrubber({
   pos,
   setPos,
@@ -1389,16 +1494,19 @@ function ReplayScrubber({
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [hoverPos, setHoverPos] = useState<number | null>(null);
+
   const fmt = (ts: number) =>
     new Date(ts * 1000).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
     });
+
   const hoverTs =
     hoverPos != null && tStart != null && tEnd != null
       ? tStart + hoverPos * (tEnd - tStart)
       : null;
+
   const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (disabled) return;
     const rect = wrapRef.current?.getBoundingClientRect();
@@ -1406,6 +1514,7 @@ function ReplayScrubber({
     const p = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     setHoverPos(p);
   };
+
   return (
     <div
       ref={wrapRef}
