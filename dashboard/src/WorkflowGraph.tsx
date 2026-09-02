@@ -26,8 +26,8 @@ const ACTIVITY_COLOR: Record<AgentActivity, string> = {
 
 /** Per-agent accent color for idle/baseline. Activity colors take over when busy. */
 const AGENT_TINT: Record<string, string> = {
-  clue: "#a78bfa",          // violet — matches Toolkits/Tasks per-agent coding
-  sarah: "#fb7185",         // rose
+  atlas: "#a78bfa",          // violet — matches Toolkits/Tasks per-agent coding
+  nova: "#fb7185",         // rose
   claude: "#34d399",        // emerald — Anthropic-ish
   "agent-media": "#34d399",
 };
@@ -1292,8 +1292,8 @@ function UserNode({ cx, cy, now }: { cx: number; cy: number; now: number }) {
 /** Agent-specific bright/glow color for the neural-net canvas inside the orb.
  *  Falls back to the activity color when busy so the orb visually shifts state. */
 const AGENT_NET_GLOW: Record<string, string> = {
-  clue: "#c4b5fd",
-  sarah: "#fda4af",
+  atlas: "#c4b5fd",
+  nova: "#fda4af",
   claude: "#6ee7b7",
   "agent-media": "#6ee7b7",
 };
