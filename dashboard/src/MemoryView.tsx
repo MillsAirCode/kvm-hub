@@ -64,8 +64,8 @@ function peerLabel(id: string): string {
 function peerColor(id: string): string {
   if (id === "hermes") return "text-emerald-300 bg-emerald-500/10 border-emerald-500/30";
   if (isHumanPeer(id)) return "text-sky-300 bg-sky-500/10 border-sky-500/30";
-  if (id === "clue") return "text-violet-300 bg-violet-500/10 border-violet-500/30";
-  if (id === "sarah") return "text-rose-300 bg-rose-500/10 border-rose-500/30";
+  if (id === "atlas") return "text-violet-300 bg-violet-500/10 border-violet-500/30";
+  if (id === "nova") return "text-rose-300 bg-rose-500/10 border-rose-500/30";
   if (id === "agent-media" || id === "codex") return "text-emerald-300 bg-emerald-500/10 border-emerald-500/30";
   return "text-amber-300 bg-amber-500/10 border-amber-500/30";
 }
