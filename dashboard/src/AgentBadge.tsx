@@ -25,10 +25,10 @@ interface VariantSpec {
 }
 
 const VARIANTS: Record<string, VariantSpec> = {
-  clue:           { color: "#a78bfa", glow: "#c4b5fd", border: "double" },
-  sarah:          { color: "#fb7185", glow: "#fda4af", border: "heavy"  },
+  atlas:           { color: "#a78bfa", glow: "#c4b5fd", border: "double" },
+  nova:          { color: "#fb7185", glow: "#fda4af", border: "heavy"  },
   claude:         { color: "#34d399", glow: "#6ee7b7", border: "single" },
-  claude_natalie: { color: "#34d399", glow: "#6ee7b7", border: "single" },
+  "agent-media":   { color: "#34d399", glow: "#6ee7b7", border: "single" },
 };
 
 const DEFAULT_VARIANT: VariantSpec = {
@@ -106,4 +106,3 @@ export default function AgentBadge({ agentId, name, role, state }: AgentBadgePro
     </div>
   );
 }
-

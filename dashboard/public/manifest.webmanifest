@@ -1,7 +1,7 @@
 {
   "name": "KVM Hub",
   "short_name": "KVM Hub",
-  "description": "Brad's fleet ops console — machines, agents, memory, tasks.",
+  "description": "Fleet ops console — machines, agents, memory, tasks.",
   "start_url": "/",
   "display": "standalone",
   "orientation": "any",

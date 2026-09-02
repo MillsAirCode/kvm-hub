@@ -3,10 +3,10 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchAgents, fetchAgentMetrics, type Agent, type AgentMetricsResponse } from "./agents";
 
 const AGENT_COLORS: Record<string, string> = {
-  clue: "#a78bfa",          // violet
-  sarah: "#fb7185",         // rose
+  atlas: "#a78bfa",          // violet
+  nova: "#fb7185",         // rose
   claude: "#34d399",        // emerald
-  claude_natalie: "#34d399", // emerald
+  "agent-media": "#34d399", // emerald
 };
 
 function colorFor(id: string): string {

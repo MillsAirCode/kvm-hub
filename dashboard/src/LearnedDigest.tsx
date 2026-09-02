@@ -26,7 +26,7 @@ function dayLabel(iso?: string): string {
 
 function peerLabel(id?: string): string {
   if (!id) return "?";
-  if (/^\d+$/.test(id)) return "Brad";
+  if (/^\d+$/.test(id)) return "You";
   if (id === "hermes") return "Hermes";
   if (id === "user-default-hermes-agent") return "API";
   return id;
