@@ -31,7 +31,7 @@ type HostStats = {
   error?: string | null;
 };
 
-const HOST_IDS = ["bradbigdesktop", "junior", "natalie"];
+const HOST_IDS = ["gpu-workstation", "inference-node", "media-server"];
 
 function fmtMb(n?: number | null): string {
   if (n == null) return "—";

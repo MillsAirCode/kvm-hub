@@ -372,7 +372,7 @@ export default function App() {
             </div>
             <div className="min-w-0">
               <div className="text-base font-mono font-bold tracking-wider phosphor text-accent-glow">KVM_HUB</div>
-              <div className="text-[10px] text-zinc-500 truncate font-mono">brad's fleet ops console</div>
+              <div className="text-[10px] text-zinc-500 truncate font-mono">fleet ops console</div>
             </div>
           </div>
           <div className="px-3 mb-3">
