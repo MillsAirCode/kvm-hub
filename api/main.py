@@ -2395,14 +2395,27 @@ async def _host_gpu_amd(host_id: str, cfg: dict) -> dict:
     gtt_used = int(fields.get("GTT_USED", "0") or 0) // (1024 * 1024)
     gtt_total = int(fields.get("GTT_TOTAL", "0") or 0) // (1024 * 1024)
 
-    # Try to attribute the dominant llama-server VRAM block as a single proc
-    # (no per-process VRAM accounting on AMD; report llama-server RSS as a proxy)
+    # On an APU (small BIOS carve-out) the GPU's real pool is VRAM + GTT, both
+    # system RAM, so report the sum; a 256 MiB total on a BC-250 holding a 13 GB
+    # model is meaningless. Discrete cards (large VRAM) keep VRAM-only figures.
+    uma = vram_total < 4096 and gtt_total > 0
+    mem_used = vram_used + gtt_used if uma else vram_used
+    mem_total = vram_total + gtt_total if uma else vram_total
+
+    # Attribute GPU memory to the llama-server process from the DRM fdinfo
+    # counters (drm-memory-vram + drm-memory-gtt, deduplicated per client id);
+    # fall back to RSS when the kernel doesn't expose them.
     procs: list[dict] = []
     rc2, out2, _ = await _ssh_or_local_run(
         cfg,
-        "pgrep -af 'llama-server' | head -1 | awk '{print $1}' | "
-        "xargs -I{} sh -c 'cat /proc/{}/status 2>/dev/null | "
-        "awk -v pid={} \"/^Name/ {n=\\$2} /^VmRSS/ {r=\\$2; print pid, n, r}\"'",
+        "pid=$(pgrep -f 'llama-server -m' | head -1); [ -n \"$pid\" ] || exit 0; "
+        "name=$(awk '/^Name/ {print $2}' /proc/$pid/status 2>/dev/null); "
+        "kib=$(cat /proc/$pid/fdinfo/* 2>/dev/null | awk '"
+        "/^drm-client-id/ {c=$2} "
+        "/^drm-memory-(vram|gtt):/ {k=c\"/\"$1; if (!(k in s)) {s[k]=1; t+=$2}} "
+        "END {print t+0}'); "
+        "[ \"$kib\" -gt 0 ] 2>/dev/null || kib=$(awk '/^VmRSS/ {print $2}' /proc/$pid/status 2>/dev/null); "
+        "echo $pid $name $kib",
     )
     if rc2 == 0:
         for line in out2.strip().splitlines():
@@ -2412,7 +2425,7 @@ async def _host_gpu_amd(host_id: str, cfg: dict) -> dict:
                     procs.append({
                         "pid": int(parts[0]),
                         "name": parts[1],
-                        "vram_mib": int(parts[2]) // 1024,  # RSS is in kB
+                        "vram_mib": int(parts[2]) // 1024,  # kB -> MiB
                     })
                 except Exception:
                     pass
@@ -2420,9 +2433,10 @@ async def _host_gpu_amd(host_id: str, cfg: dict) -> dict:
     return {
         "host": host_id,
         "available": True,
-        "name": f"AMD Radeon iGPU (UMA, +{gtt_total} MiB GTT)",
-        "vram_used_mib": vram_used,
-        "vram_total_mib": vram_total,
+        "name": (f"AMD Radeon iGPU (UMA: {vram_total} MiB VRAM + {gtt_total} MiB GTT)"
+                 if uma else "AMD Radeon GPU"),
+        "vram_used_mib": mem_used,
+        "vram_total_mib": mem_total,
         "util_pct": util,
         "temp_c": temp,
         "processes": procs,
