@@ -45,5 +45,6 @@
   <body class="bg-ink-950 text-zinc-100 antialiased" style="background:#0a0a0d">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+      <script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(e){console.warn("SW register failed",e);});});}</script>
   </body>
 </html>

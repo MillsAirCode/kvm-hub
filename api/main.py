@@ -4010,6 +4010,10 @@ if DASHBOARD_DIST.is_dir():
             if path.endswith(".webmanifest"):
                 media_type = "application/manifest+json"
                 headers["Cache-Control"] = "no-cache"
+            elif path == "sw.js":
+                # Service worker must revalidate every load so SW updates ship.
+                media_type = "text/javascript"
+                headers["Cache-Control"] = "no-cache"
             elif path == "index.html":
                 headers["Cache-Control"] = "no-cache"
             elif path in UNHASHED_STATIC or path.startswith("splash/"):
