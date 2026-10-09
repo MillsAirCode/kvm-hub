@@ -12,9 +12,10 @@ type CronJob = {
 };
 
 const HOST_LABEL: Record<string, string> = {
-  natalie: "Natalie",
-  clue: "Clue",
-  sarah: "Sarah",
+  "media-server": "Media",
+  "gpu-workstation": "Workstation",
+  "inference-node": "Inference",
+  "storage-node": "Storage",
 };
 
 const SOURCE_BADGE: Record<string, string> = {

@@ -9,21 +9,21 @@ type Toolkit = {
 };
 
 const AGENT_ACCENT: Record<string, string> = {
-  clue: "border-violet-500/40 bg-violet-500/5 text-violet-200",
-  sarah: "border-rose-500/40 bg-rose-500/5 text-rose-200",
-  claude_natalie: "border-cyan-500/40 bg-cyan-500/5 text-cyan-200",
+  atlas: "border-violet-500/40 bg-violet-500/5 text-violet-200",
+  nova: "border-rose-500/40 bg-rose-500/5 text-rose-200",
+  "agent-media": "border-cyan-500/40 bg-cyan-500/5 text-cyan-200",
 };
 
 const AGENT_DISPLAY: Record<string, string> = {
-  clue: "CLUE",
-  sarah: "SARAH",
-  claude_natalie: "CLAUDE",
+  atlas: "ATLAS",
+  nova: "NOVA",
+  "agent-media": "CODEX",
 };
 
 const AGENT_PHOSPHOR: Record<string, string> = {
-  clue: "text-violet-300",
-  sarah: "text-rose-300",
-  claude_natalie: "text-cyan-300",
+  atlas: "text-violet-300",
+  nova: "text-rose-300",
+  "agent-media": "text-cyan-300",
 };
 
 function AgentToolkit({ agent }: { agent: Agent }) {
@@ -79,8 +79,8 @@ function AgentToolkit({ agent }: { agent: Agent }) {
           <div className="text-[11px] text-zinc-600 italic font-mono">loading…</div>
         ) : toolkits.length === 0 ? (
           <div className="text-[11px] text-zinc-600 italic font-mono">
-            {agent.id === "claude_natalie"
-              ? "Claude Code orchestrator (no Hermes toolsets)"
+            {agent.id === "agent-media"
+              ? "Codex orchestrator (no Hermes toolsets)"
               : "no toolkits exposed"}
           </div>
         ) : (

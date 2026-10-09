@@ -199,25 +199,25 @@ export default function CommandPalette({
 
     // NEW: System & Theme Actions
     acts.push({
-      id: "restart-clue",
-      title: "Restart Clue",
-      hint: "POST /api/agents/clue/restart",
+      id: "restart-atlas",
+      title: "Restart Atlas",
+      hint: "POST /api/agents/atlas/restart",
       group: "Action",
       icon: "🔁",
       run: async () => {
-        try { await fetch("/api/agents/clue/restart", { method: "POST" }); }
+        try { await fetch("/api/agents/atlas/restart", { method: "POST" }); }
         finally { onClose(); }
       },
     });
 
     acts.push({
-      id: "restart-sarah",
-      title: "Restart Sarah",
-      hint: "POST /api/agents/sarah/restart",
+      id: "restart-nova",
+      title: "Restart Nova",
+      hint: "POST /api/agents/nova/restart",
       group: "Action",
       icon: "🔁",
       run: async () => {
-        try { await fetch("/api/agents/sarah/restart", { method: "POST" }); }
+        try { await fetch("/api/agents/nova/restart", { method: "POST" }); }
         finally { onClose(); }
       },
     });

@@ -4,11 +4,11 @@ import NeuralNetMini from "./NeuralNetMini";
 import { emitWorkflow as emitWorkflowFromBus, onWorkflow, type WorkflowEvent } from "./eventBus";
 
 /**
- * Workflow graph: Brad node anchored at the bottom, agents in a row above,
+ * Workflow graph: You node anchored at the bottom, agents in a row above,
  * connected by curved arcs. Particles travel ALONG the arcs in either
  * direction:
- *   - Brad → agent: incoming user message (sky)
- *   - agent → Brad: assistant response (emerald)
+ *   - You → agent: incoming user message (sky)
+ *   - agent → You: assistant response (emerald)
  *   - tool calls: amber particles orbit the agent
  *
  * Even when the fleet is silent, ambient particles drift along every
@@ -26,10 +26,10 @@ const ACTIVITY_COLOR: Record<AgentActivity, string> = {
 
 /** Per-agent accent color for idle/baseline. Activity colors take over when busy. */
 const AGENT_TINT: Record<string, string> = {
-  clue: "#a78bfa",          // violet — matches Toolkits/Tasks per-agent coding
-  sarah: "#fb7185",         // rose
+  atlas: "#a78bfa",          // violet — matches Toolkits/Tasks per-agent coding
+  nova: "#fb7185",         // rose
   claude: "#34d399",        // emerald — Anthropic-ish
-  claude_natalie: "#34d399",
+  "agent-media": "#34d399",
 };
 function agentTint(id: string): string {
   return AGENT_TINT[id] ?? "#6ee7b7"; // fallback emerald
@@ -597,7 +597,7 @@ export default function WorkflowGraph() {
     };
   }, []);
 
-  // Layout: agents in a horizontal row at top, Brad bottom-center
+  // Layout: agents in a horizontal row at top, You bottom-center
   const userPos = { x: size.w / 2, y: size.h - 64 };
   const agentPositions = useMemo(() => {
     if (agents.length === 0) return [] as { x: number; y: number }[];
@@ -1052,7 +1052,7 @@ export default function WorkflowGraph() {
           return els;
         })}
 
-        {/* Brad node */}
+        {/* You node */}
         <UserNode cx={userPos.x} cy={userPos.y} now={now} />
 
         {/* Agent nodes */}
@@ -1272,7 +1272,7 @@ function UserNode({ cx, cy, now }: { cx: number; cy: number; now: number }) {
         fill="#e5e7eb"
         style={{ letterSpacing: "0.5px" }}
       >
-        Brad
+        You
       </text>
       <text
         x={cx}
@@ -1292,10 +1292,10 @@ function UserNode({ cx, cy, now }: { cx: number; cy: number; now: number }) {
 /** Agent-specific bright/glow color for the neural-net canvas inside the orb.
  *  Falls back to the activity color when busy so the orb visually shifts state. */
 const AGENT_NET_GLOW: Record<string, string> = {
-  clue: "#c4b5fd",
-  sarah: "#fda4af",
+  atlas: "#c4b5fd",
+  nova: "#fda4af",
   claude: "#6ee7b7",
-  claude_natalie: "#6ee7b7",
+  "agent-media": "#6ee7b7",
 };
 
 function AgentNode({

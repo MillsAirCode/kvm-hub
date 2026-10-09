@@ -19,9 +19,9 @@ type Resp = {
 };
 
 const HOSTS: { id: string; label: string }[] = [
-  { id: "natalie", label: "Natalie" },
-  { id: "bradbigdesktop", label: "Clue" },
-  { id: "junior", label: "Sarah" },
+  { id: "media-server", label: "Media" },
+  { id: "gpu-workstation", label: "Workstation" },
+  { id: "inference-node", label: "Inference" },
 ];
 
 function fmtMb(mb: number): string {

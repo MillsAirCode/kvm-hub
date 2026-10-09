@@ -179,7 +179,7 @@ function MachineForm({
       </div>
       <div className="grid grid-cols-2 gap-3">
         <Field label="MAC Address" value={form.mac} onChange={(v) => set("mac", v)} placeholder="aa:bb:cc:dd:ee:ff" mono />
-        <Field label="Username" value={form.username} onChange={(v) => set("username", v)} placeholder="brad" mono />
+        <Field label="Username" value={form.username} onChange={(v) => set("username", v)} placeholder="user" mono />
       </div>
       <Field label="SSH Key File" value={form.key_file} onChange={(v) => set("key_file", v)} placeholder="/home/user/.ssh/id_ed25519" mono />
 
@@ -246,7 +246,7 @@ function AgentForm({
         <Select label="Host Machine" value={form.host} onChange={(v) => set("host", v)}
           options={[{ value: "", label: "Select..." }, ...machines.map((m) => ({ value: m.hostname, label: m.name }))]}
         />
-        <Field label="SSH User" value={form.user} onChange={(v) => set("user", v)} placeholder="brad" mono />
+        <Field label="SSH User" value={form.user} onChange={(v) => set("user", v)} placeholder="user" mono />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <Field label="SSH Key File" value={form.key_file} onChange={(v) => set("key_file", v)} mono />

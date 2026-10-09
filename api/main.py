@@ -434,7 +434,7 @@ def _hermes_api_key() -> str | None:
 
 class SendMessageBody(BaseModel):
     message: str
-    # Optional: agent_id of the originator (e.g. "claude_natalie") so the
+    # Optional: agent_id of the originator (e.g. "agent-media") so the
     # workflow viz can render agent→agent flow instead of user→agent.
     source: str | None = None
 
@@ -771,9 +771,8 @@ async def restart_agent(agent_id: str) -> dict:
     user units. Returns ok + per-unit stdout/stderr. Bounded 60s timeout.
 
     Agents may set a `restart:` block in agents.yaml to override the default
-    target (Sarah uses this — her llama-server lives on Junior while the
-    shared gateway on bradBigDesktop must not be touched, since it would
-    kick Clue too)."""
+    target (for example, the inference host may run llama-server while the
+    shared gateway on gpu-workstation must not be restarted)."""
     agent = find_agent(agent_id)
     override = agent.get("restart") or {}
     host = override.get("ssh_host") or agent.get("host", "localhost")
@@ -1276,7 +1275,7 @@ async def agent_status(agent_id: str) -> dict:
     # a long-completed turn whose final line was "thinking"-shaped (e.g. a
     # silent curator pass with no "response ready") pins the agent to
     # "thinking" forever in the dashboard. (Bug surfaced 2026-04-30 with
-    # Sarah's autonomous curator pass on Hermes 0.12.0.)
+    # Nova's autonomous curator pass on Hermes 0.12.0.)
     if state == "thinking" and classified_at is not None:
         if (time.time() - classified_at) > 60:
             state = "idle"
@@ -1600,7 +1599,7 @@ def _tasks_init() -> None:
                 ("Fleet sweep", "🧹",
                  "Run `df -h`, `free -h`, and report anything filling up. Also: list any zombie / orphan processes.",
                  "clue", 2),
-                ("Sarah idea", "💡",
+                ("Brainstorm", "💡",
                  "Pitch one creative side project we could build this weekend, given the current fleet hardware.",
                  "sarah", 3),
             ]
@@ -1970,7 +1969,7 @@ async def _capture_thumbnail(host_id: str) -> bytes | None:
     if not cfg:
         return None
 
-    # Local host (the dashboard server itself, e.g. Natalie) — a self-screenshot
+    # Local host (the dashboard server itself, e.g. media-server) — a self-screenshot
     # of the headless container isn't useful and tends to capture a black frame
     # from the user's display. Skip entirely so the React side hides the block.
     if cfg.get("ssh_host") is None:
@@ -2280,7 +2279,7 @@ class IperfRequest(BaseModel):
 async def _ssh_run(cfg: dict, cmd: str, timeout: float = 30.0) -> tuple[int, str, str]:
     """Run a shell command on `cfg`'s host. Returns (rc, stdout, stderr).
 
-    For natalie (no ssh_host) the command runs locally."""
+    For media-server (no ssh_host) the command runs locally."""
     if not cfg.get("ssh_host"):
         proc = await asyncio.create_subprocess_shell(
             cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
@@ -3525,9 +3524,9 @@ async def cron_overview() -> list[dict]:
             )
             if out and "No scheduled" not in out:
                 jobs.extend(_parse_hermes_cron(out, src["id"]))
-        # systemd user timers (only meaningful on natalie since the others
+        # systemd user timers (only meaningful on media-server since the others
         # mostly carry stock snap timers)
-        if src["id"] == "natalie":
+        if src["id"] == "media-server":
             rc, out, _ = await _ssh_cmd(
                 src, "systemctl --user list-timers --no-pager 2>&1 || true",
             )
@@ -3949,7 +3948,7 @@ async def config_discover_services(machine_id: str):
                 discovered.append({
                     "id": unit.replace(".service", "").replace("@", "-"),
                     "name": unit.replace(".service", ""),
-                    "type": "systemd_user_remote" if machine_id != "natalie" else "systemd_user_local",
+                    "type": "systemd_user_remote" if machine_id != "media-server" else "systemd_user_local",
                     "unit": unit,
                     "host": machine_id,
                     "ssh_user": mcfg.get("username", ""),
@@ -3970,7 +3969,7 @@ async def config_discover_services(machine_id: str):
                 discovered.append({
                     "id": f"docker-{name}",
                     "name": name,
-                    "type": "docker_local" if machine_id == "natalie" else "docker_remote",
+                    "type": "docker_local" if machine_id == "media-server" else "docker_remote",
                     "container": name,
                     "host": machine_id,
                     "description": parts[1] if len(parts) > 1 else "",
@@ -4001,8 +4000,8 @@ if DASHBOARD_DIST.is_dir():
             # /assets/* is content-hashed and served by the StaticFiles mount above,
             # so this catch-all only sees root-level files: icons, manifest, splash
             # screens, large videos, index.html. Most are NOT content-hashed —
-            # treating them all as immutable made stale icons stick in Safari (Brad
-            # caught a stale purple PWA icon 2026-05-02 even after we redeployed).
+            # treating them all as immutable made stale icons stick in Safari.
+            # We caught a stale purple PWA icon 2026-05-02 even after redeploying.
             UNHASHED_STATIC = {
                 "icon-192.png", "icon-512.png", "apple-touch-icon.png",
                 "favicon-32.png", "manifest.webmanifest",

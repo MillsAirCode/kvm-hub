@@ -15,9 +15,6 @@
 
 ---
 
-### Live View
-![Live View](docs/screenshots/live.png)
-
 ### Agent Panels
 ![Agent Panels](docs/screenshots/agents.png)
 

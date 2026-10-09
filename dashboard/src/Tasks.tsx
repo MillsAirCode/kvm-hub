@@ -105,9 +105,9 @@ function StatusPill({ status }: { status: Status }) {
 }
 
 function AgentChip({ agentId }: { agentId: string | null }) {
-  const cls = agentId === "clue" ? "bg-violet-500/20 text-emerald-300 border-violet-500/30"
-    : agentId === "sarah" ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
-    : agentId === "claude_natalie" ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/30"
+  const cls = agentId === "atlas" ? "bg-violet-500/20 text-emerald-300 border-violet-500/30"
+    : agentId === "nova" ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+    : agentId === "agent-media" ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/30"
     : "bg-zinc-700/50 text-zinc-400 border-zinc-600/50";
   return (
     <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono border ${cls}`}>

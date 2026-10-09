@@ -47,26 +47,26 @@ function relTime(iso?: string): string {
 }
 
 function isHumanPeer(id: string): boolean {
-  // Brad's peer ID is his Telegram chat_id (numeric).
+  // The operator peer ID is a numeric Telegram chat_id.
   return /^\d+$/.test(id);
 }
 
 function peerLabel(id: string): string {
   if (id === "hermes") return "AI (Hermes)";
-  if (isHumanPeer(id)) return "Brad";
+  if (isHumanPeer(id)) return "You";
   if (id === "user-default-hermes-agent") return "API caller";
-  if (id === "clue") return "Clue";
-  if (id === "sarah") return "Sarah";
-  if (id === "claude-natalie" || id === "claude_natalie") return "Claude";
+  if (id === "atlas") return "Atlas";
+  if (id === "nova") return "Nova";
+  if (id === "agent-media" || id === "codex") return "Codex";
   return id;
 }
 
 function peerColor(id: string): string {
   if (id === "hermes") return "text-emerald-300 bg-emerald-500/10 border-emerald-500/30";
   if (isHumanPeer(id)) return "text-sky-300 bg-sky-500/10 border-sky-500/30";
-  if (id === "clue") return "text-violet-300 bg-violet-500/10 border-violet-500/30";
-  if (id === "sarah") return "text-rose-300 bg-rose-500/10 border-rose-500/30";
-  if (id === "claude-natalie" || id === "claude_natalie") return "text-emerald-300 bg-emerald-500/10 border-emerald-500/30";
+  if (id === "atlas") return "text-violet-300 bg-violet-500/10 border-violet-500/30";
+  if (id === "nova") return "text-rose-300 bg-rose-500/10 border-rose-500/30";
+  if (id === "agent-media" || id === "codex") return "text-emerald-300 bg-emerald-500/10 border-emerald-500/30";
   return "text-amber-300 bg-amber-500/10 border-amber-500/30";
 }
 

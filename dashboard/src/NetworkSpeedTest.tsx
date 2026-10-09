@@ -3,10 +3,10 @@ import { useState } from "react";
 type Host = { id: string; label: string };
 
 const HOSTS: Host[] = [
-  { id: "natalie", label: "Natalie" },
-  { id: "bradbigdesktop", label: "Clue (4090)" },
-  { id: "junior", label: "Sarah (Junior)" },
-  { id: "plex", label: "Plex box" },
+  { id: "media-server", label: "Media" },
+  { id: "gpu-workstation", label: "Workstation" },
+  { id: "inference-node", label: "Inference" },
+  { id: "storage-node", label: "Storage" },
 ];
 
 type Result = {
@@ -23,8 +23,8 @@ type Result = {
 };
 
 export default function NetworkSpeedTest() {
-  const [from, setFrom] = useState<string>("junior");
-  const [to, setTo] = useState<string>("plex");
+  const [from, setFrom] = useState<string>("inference-node");
+  const [to, setTo] = useState<string>("storage-node");
   const [duration, setDuration] = useState<number>(5);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<Result | null>(null);

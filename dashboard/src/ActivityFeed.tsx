@@ -43,7 +43,7 @@ function isHumanPeer(id: string): boolean {
 
 function peerLabel(id: string): string {
   if (id === "hermes") return "AI";
-  if (isHumanPeer(id)) return "Brad";
+  if (isHumanPeer(id)) return "You";
   if (id === "user-default-hermes-agent") return "API";
   return id.slice(0, 16);
 }
